@@ -120,6 +120,8 @@ window.SDR_FALLBACK = {
   }
  ],
  "videos": [],
+ "gallery": [],
+ "reviews": [],
  "settings": {
   "hero_title": "Saveurs des Rois",
   "hero_text": "Pâtisseries orientales artisanales, faites maison avec passion et authenticité.",

@@ -139,6 +139,8 @@ function pageAccueil() {
     </div>
   </section>` : ''}
 
+  ${sectionConfiance()}
+
   <section class="section">
     <div class="wrap duo duo--inverse">
       ${arche(set('story_image', '/assets/img/cornes-de-gazelle-coffrets.webp'), 'Pâtisseries Saveurs des Rois')}
@@ -149,6 +151,126 @@ function pageAccueil() {
       </div>
     </div>
   </section>`;
+}
+
+/* ---------------- Vos événements : galerie + avis */
+const stars = n => `<span class="etoiles" aria-label="${n} sur 5">${'★'.repeat(n)}<span class="etoiles__vide">${'★'.repeat(5 - n)}</span></span>`;
+const moisAnnee = d => { const t = new Date(String(d).replace(' ', 'T') + 'Z'); return isNaN(t) ? '' : t.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }); };
+function noteMoyenne() {
+  const r = state.reviews || [];
+  if (!r.length) return null;
+  return { moy: r.reduce((t, x) => t + x.rating, 0) / r.length, n: r.length };
+}
+function carteAvis(r) {
+  return `<article class="avis">
+    <header>${stars(r.rating)}<span class="avis__date">${esc(moisAnnee(r.created_at))}</span></header>
+    <blockquote>${paras(r.text)}</blockquote>
+    <footer><strong>${esc(r.name)}</strong>${r.event_type ? ` · ${esc(r.event_type)}` : ''}${r.source === 'message' ? ' <span class="avis__src">· avis reçu par message</span>' : ''}</footer>
+    ${r.reply ? `<div class="avis__reponse"><strong>Réponse de Saveurs des Rois</strong>${paras(r.reply)}</div>` : ''}
+  </article>`;
+}
+function tuileGalerie(g, i) {
+  return `<button type="button" class="galerie__item" data-galerie="${i}" aria-label="Agrandir : ${esc(g.title || g.event_type || 'photo')}">
+    <img src="${esc(asset(g.image))}" alt="${esc(g.title || g.event_type || 'Événement Saveurs des Rois')}" loading="lazy">
+    ${g.title || g.event_type ? `<span>${esc(g.title || g.event_type)}</span>` : ''}
+  </button>`;
+}
+function blocNote() {
+  const m = noteMoyenne();
+  return m ? `<p class="note-globale">${stars(Math.round(m.moy))} <strong>${m.moy.toFixed(1).replace('.', ',')}/5</strong> · ${m.n} avis</p>` : '';
+}
+
+function pageEvenements() {
+  const g = state.gallery || [], r = state.reviews || [];
+  return `
+  <section class="page-titre wrap"><h1>Vos événements</h1><p>Mariages, naissances, fêtes de l’Aïd… Merci de nous avoir confié vos plus beaux moments.</p>${blocNote()}</section>
+  <section class="section" style="padding-top:1.5rem">
+    <div class="wrap">
+      ${g.length ? `<div class="galerie">${g.map(tuileGalerie).join('')}</div>`
+        : `<div class="vide"><h2 style="font-size:1.25rem">Les premières photos arrivent</h2><p>Les plateaux et tables de nos clients seront bientôt présentés ici.</p></div>`}
+    </div>
+  </section>
+  <section class="section section--creme" id="avis">
+    <div class="wrap">
+      <h2 class="titre">Ce que disent nos clients</h2>
+      ${r.length ? `<div class="avis-liste">${r.map(carteAvis).join('')}</div>` : `<p class="chapeau">Soyez le premier à partager votre expérience.</p>`}
+      <p class="note centre avis__mention">Avis modérés : chaque avis est relu avant publication par Saveurs des Rois. Les avis sont affichés du plus récent au plus ancien, avec leur date.</p>
+      <div class="panneau avis-form" id="avis-form">
+        <h2>Laisser un avis</h2>
+        <form id="formAvis" novalidate>
+          <div class="message" id="avisMsg" hidden></div>
+          <p class="choix-note__titre" id="noteTitre">Votre note</p>
+          <fieldset class="choix-note" aria-labelledby="noteTitre"><legend class="sr">Votre note</legend>
+            ${[5, 4, 3, 2, 1].map(n => `<input type="radio" name="rating" id="n${n}" value="${n}"><label for="n${n}" title="${n} étoile${n > 1 ? 's' : ''}">★</label>`).join('')}
+          </fieldset>
+          <div class="deux">
+            <div class="champ"><label for="a-name">Prénom (et initiale)</label><input id="a-name" name="name" autocomplete="given-name" placeholder="Ex : Samira B."></div>
+            <div class="champ"><label for="a-type">Occasion</label><select id="a-type" name="event_type"><option value="">Choisir…</option><option>Mariage</option><option>Fiançailles</option><option>Naissance</option><option>Aïd / Ramadan</option><option>Anniversaire</option><option>Événement d’entreprise</option><option>Plaisir personnel</option><option>Autre</option></select></div>
+          </div>
+          <div class="champ"><label for="a-text">Votre avis</label><textarea id="a-text" name="text" placeholder="Qu’avez-vous (et vos invités) le plus apprécié ?"></textarea></div>
+          <div class="piege" aria-hidden="true"><label>Site web <input name="website" tabindex="-1" autocomplete="off"></label></div>
+          <label class="consent"><input type="checkbox" name="consent"> <span>J’accepte que mon prénom, mon avis et sa date soient publiés sur ce site.</span></label>
+          <button class="btn btn--or" type="submit" style="width:100%">Envoyer mon avis</button>
+        </form>
+      </div>
+    </div>
+  </section>
+  <dialog class="visionneuse" id="visionneuse" aria-label="Photo agrandie">
+    <button class="visionneuse__fermer" type="button" data-vis="close" aria-label="Fermer">×</button>
+    <button class="visionneuse__nav" type="button" data-vis="-1" aria-label="Photo précédente">‹</button>
+    <figure><img id="visImg" alt=""><figcaption id="visCap"></figcaption></figure>
+    <button class="visionneuse__nav visionneuse__nav--d" type="button" data-vis="1" aria-label="Photo suivante">›</button>
+  </dialog>`;
+}
+
+function sectionConfiance() {
+  const g = (state.gallery || []).slice(0, 4), r = (state.reviews || []).slice(0, 3);
+  if (!g.length && !r.length) return '';
+  return `
+  <section class="section section--creme">
+    <div class="wrap">
+      <h2 class="titre">Ils nous ont confié leurs événements</h2>
+      <div class="centre">${blocNote()}</div>
+      ${g.length ? `<div class="galerie galerie--apercu">${g.map((x, i) => `<a class="galerie__item" href="#/evenements"><img src="${esc(asset(x.image))}" alt="${esc(x.title || x.event_type || 'Événement')}" loading="lazy">${x.title || x.event_type ? `<span>${esc(x.title || x.event_type)}</span>` : ''}</a>`).join('')}</div>` : ''}
+      ${r.length ? `<div class="avis-liste" style="margin-top:2rem">${r.map(carteAvis).join('')}</div>` : ''}
+      <p class="centre" style="margin-top:2rem"><a class="btn btn--sombre" href="#/evenements">Voir tous les événements et avis</a></p>
+    </div>
+  </section>`;
+}
+
+let visIndex = 0;
+function ouvrirVisionneuse(i) {
+  const g = state.gallery || []; if (!g.length) return;
+  visIndex = (i + g.length) % g.length;
+  const it = g[visIndex];
+  document.getElementById('visImg').src = asset(it.image);
+  document.getElementById('visImg').alt = it.title || it.event_type || '';
+  document.getElementById('visCap').innerHTML = [it.title && `<strong>${esc(it.title)}</strong>`, it.event_type && esc(it.event_type), it.caption && esc(it.caption)].filter(Boolean).join(' · ');
+  const d = document.getElementById('visionneuse'); if (!d.open) d.showModal();
+}
+
+/* ---------------- Mesure d'audience anonyme (sans cookie ni identifiant) */
+function mesure(data) {
+  if (IS_FILE || state.offline || navigator.webdriver) return;
+  try { navigator.sendBeacon('/api/track', JSON.stringify(data)); } catch { /* sans incidence */ }
+}
+function mesureVue() {
+  const hash = location.hash.replace(/^#\/?/, '');
+  const [page, arg] = hash.split('/');
+  const data = { p: page || 'accueil' };
+  if (page === 'p' && byId(arg)) data.prod = arg;
+  let first = false;
+  try { first = !sessionStorage.getItem('sdr_v'); sessionStorage.setItem('sdr_v', '1'); } catch { /* navigation privée */ }
+  if (first) {
+    data.v = 1;
+    const utm = new URLSearchParams(location.search).get('utm_source');
+    let ref = '';
+    try { ref = document.referrer ? new URL(document.referrer).hostname : ''; } catch { }
+    data.src = utm || (ref && ref !== location.hostname ? ref : 'direct');
+    const w = Math.min(screen.width, screen.height);
+    data.dev = w < 600 ? 'mobile' : w < 1024 && matchMedia('(pointer: coarse)').matches ? 'tablette' : 'ordinateur';
+  }
+  mesure(data);
 }
 
 function pageCollection() {
@@ -378,17 +500,19 @@ function route() {
   const [page, arg] = hash.split('/');
   const pages = {
     '': pageAccueil, collection: pageCollection, p: () => pageProduit(decodeURIComponent(arg || '')),
-    histoire: pageHistoire, videos: pageVideos, contact: pageContact, devis: pageDevis, mentions: pageMentions,
+    histoire: pageHistoire, evenements: pageEvenements, avis: pageEvenements, videos: pageVideos, contact: pageContact, devis: pageDevis, mentions: pageMentions,
   };
   main.innerHTML = (pages[page] || pageIntrouvable)();
-  document.querySelectorAll('[data-nav]').forEach(a => a.toggleAttribute('aria-current', a.dataset.nav === (page === 'p' ? 'collection' : page)));
+  document.querySelectorAll('[data-nav]').forEach(a => a.toggleAttribute('aria-current', a.dataset.nav === (page === 'p' ? 'collection' : page === 'avis' ? 'evenements' : page)));
   document.querySelectorAll('[data-nav][aria-current]').forEach(a => a.setAttribute('aria-current', 'page'));
   const p = page === 'p' ? byId(arg) : null;
   document.title = p ? `${p.name} — Saveurs des Rois` : 'Saveurs des Rois — Pâtisseries orientales artisanales';
   closeNav();
   window.scrollTo(0, 0);
   if (page) main.focus({ preventScroll: true });
+  if (page === 'avis') document.getElementById('avis-form')?.scrollIntoView();
 }
+function naviguer() { route(); mesureVue(); }
 
 /* ---------------- interactions */
 main.addEventListener('click', e => {
@@ -408,6 +532,7 @@ main.addEventListener('click', e => {
     const sel = selection();
     sel[id] = (sel[id] || 0) + qty;
     saveSelection(sel);
+    mesure({ add: id });
     toast(`${esc(byId(id).name)} ajouté (${sel[id]}) <a href="#/devis">Voir mon devis</a>`);
     return;
   }
@@ -416,6 +541,11 @@ main.addEventListener('click', e => {
     const sel = selection(); delete sel[rm.dataset.remove]; saveSelection(sel); route();
     return;
   }
+  const tuile = e.target.closest('[data-galerie]');
+  if (tuile) { ouvrirVisionneuse(+tuile.dataset.galerie); return; }
+  const vis = e.target.closest('[data-vis]');
+  if (vis) { vis.dataset.vis === 'close' ? document.getElementById('visionneuse').close() : ouvrirVisionneuse(visIndex + +vis.dataset.vis); return; }
+  if (e.target.id === 'visionneuse') { e.target.close(); return; }
   const vign = e.target.closest('[data-img]');
   if (vign) {
     document.getElementById('visuel').src = vign.dataset.img;
@@ -434,6 +564,7 @@ main.addEventListener('change', e => {
 });
 
 main.addEventListener('submit', async e => {
+  if (e.target.id === 'formAvis') return envoyerAvis(e);
   if (e.target.id !== 'form') return;
   e.preventDefault();
   const form = e.target;
@@ -521,7 +652,30 @@ async function init() {
   updateCount();
   footer();
   setupMusic();
-  route();
+  naviguer();
 }
-window.addEventListener('hashchange', route);
+window.addEventListener('hashchange', naviguer);
+document.addEventListener('keydown', e => {
+  const d = document.getElementById('visionneuse');
+  if (d?.open && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) ouvrirVisionneuse(visIndex + (e.key === 'ArrowRight' ? 1 : -1));
+});
+
+async function envoyerAvis(e) {
+  e.preventDefault();
+  const form = e.target, msg = form.querySelector('#avisMsg');
+  const d = Object.fromEntries(new FormData(form));
+  const show = t => { msg.hidden = false; msg.className = 'message message--err'; msg.textContent = t; msg.scrollIntoView({ block: 'nearest' }); };
+  if (!d.rating) return show('Choisissez une note en cliquant sur les étoiles.');
+  if (!d.name?.trim()) return show('Indiquez votre prénom.');
+  if ((d.text || '').trim().length < 10) return show('Écrivez quelques mots sur votre expérience.');
+  if (!d.consent) return show('Cochez la case d’accord pour que votre avis puisse être publié.');
+  const btn = form.querySelector('button[type=submit]'); btn.disabled = true;
+  try {
+    if (state.offline) throw new Error('Envoi indisponible pour le moment.');
+    const r = await fetch('/api/reviews', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(d) });
+    const res = await r.json();
+    if (!r.ok) throw new Error(res.error || 'Envoi impossible.');
+    form.innerHTML = '<div class="message message--ok"><strong>Merci pour votre avis !</strong> Il sera publié après relecture.</div>';
+  } catch (err) { show(err.message); btn.disabled = false; }
+}
 init();

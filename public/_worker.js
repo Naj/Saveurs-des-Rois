@@ -11,7 +11,7 @@
 /* ============================== Base de données : structure et contenu initial ============================== */
 
 
-const SCHEMA_VERSION = '2';
+const SCHEMA_VERSION = '3';
 
 const SCHEMA = [
   "CREATE TABLE IF NOT EXISTS products ( id TEXT PRIMARY KEY, name TEXT NOT NULL, arabic_name TEXT, tagline TEXT, description TEXT, price_cents INTEGER NOT NULL, price_label TEXT DEFAULT 'la pièce', threshold INTEGER, ingredients TEXT, allergens TEXT, traces TEXT, energy_kcal REAL, proteins REAL, carbs REAL, fats REAL, salt REAL, image TEXT, gallery TEXT DEFAULT '[]', featured INTEGER DEFAULT 0, visible INTEGER DEFAULT 1, position INTEGER DEFAULT 0, updated_at TEXT DEFAULT (datetime('now')) )",
@@ -20,7 +20,11 @@ const SCHEMA = [
   "CREATE TABLE IF NOT EXISTS requests ( id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL DEFAULT 'devis', name TEXT NOT NULL, email TEXT, phone TEXT, event_date TEXT, event_type TEXT, delivery TEXT, message TEXT, items TEXT DEFAULT '[]', estimate_cents INTEGER DEFAULT 0, status TEXT DEFAULT 'nouveau', created_at TEXT DEFAULT (datetime('now')) )",
   "CREATE TABLE IF NOT EXISTS media ( id TEXT PRIMARY KEY, name TEXT, mime TEXT NOT NULL, size INTEGER, data BLOB NOT NULL, created_at TEXT DEFAULT (datetime('now')) )",
   "CREATE INDEX IF NOT EXISTS idx_products_pos ON products(position)",
-  "CREATE INDEX IF NOT EXISTS idx_requests_date ON requests(created_at)"
+  "CREATE INDEX IF NOT EXISTS idx_requests_date ON requests(created_at)",
+  "CREATE TABLE IF NOT EXISTS gallery ( id INTEGER PRIMARY KEY AUTOINCREMENT, image TEXT NOT NULL, title TEXT, event_type TEXT, caption TEXT, visible INTEGER DEFAULT 1, position INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')) )",
+  "CREATE TABLE IF NOT EXISTS reviews ( id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, event_type TEXT, rating INTEGER NOT NULL, text TEXT NOT NULL, reply TEXT, source TEXT DEFAULT 'site', status TEXT DEFAULT 'en attente', event_date TEXT, created_at TEXT DEFAULT (datetime('now')) )",
+  "CREATE INDEX IF NOT EXISTS idx_reviews_status ON reviews(status, created_at)",
+  "CREATE TABLE IF NOT EXISTS stats ( day TEXT NOT NULL, kind TEXT NOT NULL, key TEXT NOT NULL DEFAULT '', n INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (day, kind, key) )"
 ];
 
 // Requêtes paramétrées : aucun souci d'apostrophes ni de retours à la ligne.
@@ -287,6 +291,10 @@ const PUBLIC_SETTINGS = [
   'contact_phone', 'contact_whatsapp', 'contact_email', 'contact_instagram', 'contact_facebook',
   'contact_tiktok', 'contact_zone', 'contact_hours', 'music_url', 'legal_text',
 ];
+const GALLERY_FIELDS = ['image', 'title', 'event_type', 'caption', 'visible', 'position'];
+const REVIEW_STATUSES = ['en attente', 'publié', 'refusé'];
+const TRACK_PAGES = ['accueil', 'collection', 'p', 'histoire', 'evenements', 'avis', 'videos', 'contact', 'devis', 'mentions'];
+const BOT_UA = /bot|crawl|spider|slurp|preview|facebookexternalhit|headless|lighthouse|monitor|curl|wget|python|httpclient/i;
 const REQUEST_STATUSES = ['nouveau', 'en cours', 'devis envoyé', 'confirmé', 'archivé'];
 
 export default {
@@ -298,7 +306,7 @@ export default {
         if (!env.DB) return json({ error: 'Base de données non reliée. Cloudflare Pages : Settings → Bindings → ajouter une base D1 nommée DB. Cloudflare Workers : vérifier database_id dans wrangler.jsonc.' }, 500);
         await ensureDb(env);
       }
-      if (path.startsWith('/api/')) return await api(request, env, url);
+      if (path.startsWith('/api/')) return await api(request, env, url, ctx);
       if (path.startsWith('/media/')) return await serveMedia(request, env, path.slice(7));
       return env.ASSETS.fetch(request);
     } catch (err) {
@@ -327,13 +335,15 @@ async function initDb(env) {
 
 /* ---------------------------------------------------------------- routes */
 
-async function api(request, env, url) {
+async function api(request, env, url, ctx) {
   const { pathname: p } = url;
   const m = request.method;
 
   // ---- Public
   if (p === '/api/catalogue' && m === 'GET') return catalogue(env);
-  if (p === '/api/requests' && m === 'POST') return createRequest(request, env);
+  if (p === '/api/requests' && m === 'POST') return createRequest(request, env, url, ctx);
+  if (p === '/api/reviews' && m === 'POST') return createReview(request, env, url, ctx);
+  if (p === '/api/track' && m === 'POST') return track(request, env);
 
   // ---- Auth
   if (p === '/api/admin/login' && m === 'POST') return login(request, env);
@@ -356,18 +366,35 @@ async function adminApi(request, env, p, m) {
 
   if (p === '/api/admin/me') return json({ ok: true });
 
+  if (p === '/api/admin/test-alert' && m === 'POST') {
+    const channels = alertChannels(env);
+    if (!channels.email && !channels.whatsapp) return json({ error: 'Aucune alerte configurée (voir le guide, section « Alertes de devis »).' }, 400);
+    const results = await notify(env, {
+      kind: 'devis', name: 'Test — Saveurs des Rois', email: '', phone: '', event_date: '', event_type: 'Test',
+      delivery: '', message: 'Ceci est une alerte de test envoyée depuis l’espace administrateur.', items: [], estimate_cents: 0,
+    }, new URL(request.url).origin);
+    const failed = results.filter(r => !r.ok);
+    if (failed.length) return json({ error: failed.map(f => `${f.channel} : ${f.error}`).join(' — ') }, 502);
+    return json({ ok: true, sent: results.map(r => r.channel) });
+  }
+
   if (p === '/api/admin/overview' && m === 'GET') {
-    const [products, videos, settings, counts] = await Promise.all([
+    const [products, videos, settings, counts, gallery, pending] = await Promise.all([
       db.prepare('SELECT * FROM products ORDER BY position, name').all(),
       db.prepare('SELECT * FROM videos ORDER BY position, id').all(),
       db.prepare('SELECT key, value FROM settings').all(),
       db.prepare("SELECT status, COUNT(*) AS n FROM requests GROUP BY status").all(),
+      db.prepare('SELECT * FROM gallery ORDER BY position, id DESC').all(),
+      db.prepare("SELECT COUNT(*) AS n FROM reviews WHERE status = 'en attente'").first(),
     ]);
     return json({
       products: products.results.map(parseProduct),
       videos: videos.results,
       settings: Object.fromEntries(settings.results.map(r => [r.key, r.value])),
       requestCounts: Object.fromEntries(counts.results.map(r => [r.status, r.n])),
+      alerts: alertChannels(env),
+      gallery: gallery.results,
+      pendingReviews: pending?.n || 0,
     });
   }
 
@@ -474,6 +501,62 @@ async function adminApi(request, env, p, m) {
     return json({ ok: true });
   }
 
+  // Galerie « Vos événements »
+  if (p === '/api/admin/gallery' && m === 'POST') {
+    const d = pick(await request.json(), GALLERY_FIELDS);
+    if (!d.image) return json({ error: 'Choisissez une photo.' }, 400);
+    const cols = Object.keys(d);
+    const r = await db.prepare(`INSERT INTO gallery (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`).bind(...Object.values(d)).run();
+    return json({ ok: true, id: r.meta.last_row_id });
+  }
+  if ((mt = p.match(/^\/api\/admin\/gallery\/(\d+)$/))) {
+    if (m === 'PUT') {
+      const d = pick(await request.json(), GALLERY_FIELDS);
+      const keys = Object.keys(d);
+      if (!keys.length) return json({ error: 'Aucune modification.' }, 400);
+      await db.prepare(`UPDATE gallery SET ${keys.map(k => `${k} = ?`).join(', ')} WHERE id = ?`).bind(...Object.values(d), mt[1]).run();
+      return json({ ok: true });
+    }
+    if (m === 'DELETE') { await db.prepare('DELETE FROM gallery WHERE id = ?').bind(mt[1]).run(); return json({ ok: true }); }
+  }
+
+  // Avis clients
+  if (p === '/api/admin/reviews' && m === 'GET') {
+    const r = await db.prepare('SELECT * FROM reviews ORDER BY created_at DESC LIMIT 500').all();
+    return json({ reviews: r.results });
+  }
+  if (p === '/api/admin/reviews' && m === 'POST') {
+    const b = await request.json();
+    const rating = toInt(b.rating);
+    if (!clean(b.name, 80) || !clean(b.text, 1500) || !(rating >= 1 && rating <= 5)) return json({ error: 'Nom, note (1 à 5) et texte obligatoires.' }, 400);
+    await db.prepare(`INSERT INTO reviews (name, event_type, rating, text, event_date, source, status) VALUES (?, ?, ?, ?, ?, 'message', 'publié')`)
+      .bind(clean(b.name, 80), clean(b.event_type, 60), rating, clean(b.text, 1500), clean(b.event_date, 20)).run();
+    return json({ ok: true });
+  }
+  if ((mt = p.match(/^\/api\/admin\/reviews\/(\d+)$/))) {
+    if (m === 'PUT') {
+      const b = await request.json();
+      const sets = [], vals = [];
+      if ('status' in b) { if (!REVIEW_STATUSES.includes(b.status)) return json({ error: 'Statut inconnu.' }, 400); sets.push('status = ?'); vals.push(b.status); }
+      if ('reply' in b) { sets.push('reply = ?'); vals.push(clean(b.reply, 1500)); }
+      if (!sets.length) return json({ error: 'Aucune modification.' }, 400);
+      await db.prepare(`UPDATE reviews SET ${sets.join(', ')} WHERE id = ?`).bind(...vals, mt[1]).run();
+      return json({ ok: true });
+    }
+    if (m === 'DELETE') { await db.prepare('DELETE FROM reviews WHERE id = ?').bind(mt[1]).run(); return json({ ok: true }); }
+  }
+
+  // Statistiques (mesure d'audience anonyme)
+  if (p === '/api/admin/stats' && m === 'GET') {
+    const days = Math.min(365, Math.max(1, toInt(new URL(request.url).searchParams.get('days')) || 30));
+    const since = parisDay(Date.now() - (days - 1) * 86400_000);
+    const [rows, reqs] = await db.batch([
+      db.prepare('SELECT day, kind, key, n FROM stats WHERE day >= ? ORDER BY day').bind(since),
+      db.prepare("SELECT substr(created_at, 1, 10) AS day, kind, COUNT(*) AS n FROM requests WHERE created_at >= ? GROUP BY day, kind").bind(since),
+    ]);
+    return json({ since, days, rows: rows.results, requests: reqs.results });
+  }
+
   return json({ error: 'Route admin inconnue.' }, 404);
 }
 
@@ -482,19 +565,23 @@ async function adminApi(request, env, p, m) {
 async function catalogue(env) {
   const db = env.DB;
   const keys = PUBLIC_SETTINGS.map(() => '?').join(',');
-  const [products, videos, settings] = await db.batch([
+  const [products, videos, settings, gallery, reviews] = await db.batch([
     db.prepare('SELECT * FROM products WHERE visible = 1 ORDER BY position, name'),
     db.prepare('SELECT id, title, description, url, poster, product_id FROM videos WHERE visible = 1 ORDER BY position, id'),
     db.prepare(`SELECT key, value FROM settings WHERE key IN (${keys})`).bind(...PUBLIC_SETTINGS),
+    db.prepare('SELECT id, image, title, event_type, caption FROM gallery WHERE visible = 1 ORDER BY position, id DESC'),
+    db.prepare("SELECT id, name, event_type, rating, text, reply, source, created_at FROM reviews WHERE status = 'publié' ORDER BY created_at DESC LIMIT 100"),
   ]);
   return json({
+    gallery: gallery.results,
+    reviews: reviews.results,
     products: products.results.map(parseProduct),
     videos: videos.results,
     settings: Object.fromEntries(settings.results.map(r => [r.key, r.value])),
   }, 200, { 'Cache-Control': 'public, max-age=30' });
 }
 
-async function createRequest(request, env) {
+async function createRequest(request, env, url, ctx) {
   let body;
   try { body = await request.json(); } catch { return json({ error: 'Demande illisible.' }, 400); }
   if (body.website) return json({ ok: true }); // pot de miel anti-robots
@@ -522,12 +609,20 @@ async function createRequest(request, env) {
     }
   }
 
+  const record = {
+    kind: body.kind === 'contact' ? 'contact' : 'devis', name, email, phone,
+    event_date: clean(body.event_date, 20), event_type: clean(body.event_type, 60), delivery: clean(body.delivery, 60),
+    message: clean(body.message, 3000), items: checked, estimate_cents: estimate,
+  };
   await env.DB.prepare(`INSERT INTO requests (kind, name, email, phone, event_date, event_type, delivery, message, items, estimate_cents)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(
-    body.kind === 'contact' ? 'contact' : 'devis', name, email, phone,
-    clean(body.event_date, 20), clean(body.event_type, 60), clean(body.delivery, 60),
-    clean(body.message, 3000), JSON.stringify(checked), estimate,
+    record.kind, name, email, phone, record.event_date, record.event_type, record.delivery,
+    record.message, JSON.stringify(checked), estimate,
   ).run();
+
+  // Alerte envoyée en arrière-plan : le client n'attend pas, et un échec d'envoi ne bloque jamais sa demande
+  const alert = notify(env, record, url.origin).catch(err => console.error('Alerte non envoyée :', err.message));
+  if (ctx?.waitUntil) ctx.waitUntil(alert);
   return json({ ok: true, estimate_cents: estimate });
 }
 
@@ -538,6 +633,112 @@ async function serveMedia(request, env, id) {
   return new Response(new Uint8Array(row.data), {
     headers: { 'Content-Type': row.mime, 'Cache-Control': 'public, max-age=31536000, immutable' },
   });
+}
+
+/* ---------------------------------------------------------------- avis & audience */
+
+async function createReview(request, env, url, ctx) {
+  let b;
+  try { b = await request.json(); } catch { return json({ error: 'Avis illisible.' }, 400); }
+  if (b.website) return json({ ok: true }); // pot de miel
+  const name = clean(b.name, 80), text = clean(b.text, 1500), rating = toInt(b.rating);
+  if (!name) return json({ error: 'Indiquez votre prénom.' }, 400);
+  if (!(rating >= 1 && rating <= 5)) return json({ error: 'Choisissez une note de 1 à 5 étoiles.' }, 400);
+  if (text.length < 10) return json({ error: 'Votre avis est un peu court : quelques mots de plus ?' }, 400);
+  const event_type = clean(b.event_type, 60);
+  await env.DB.prepare('INSERT INTO reviews (name, event_type, rating, text, source, status) VALUES (?, ?, ?, ?, ?, ?)')
+    .bind(name, event_type, rating, text, 'site', 'en attente').run();
+  const alert = notify(env, { kind: 'avis', name, rating, event_type, message: text, items: [], estimate_cents: 0 }, url.origin)
+    .catch(err => console.error('Alerte avis non envoyée :', err.message));
+  if (ctx?.waitUntil) ctx.waitUntil(alert);
+  return json({ ok: true });
+}
+
+// Mesure d'audience anonyme : aucun cookie, aucune adresse IP, aucun identifiant ; uniquement des compteurs par jour.
+async function track(request, env) {
+  const ua = request.headers.get('User-Agent') || '';
+  if (!ua || BOT_UA.test(ua)) return new Response(null, { status: 204 });
+  let b;
+  try { b = JSON.parse(await request.text()); } catch { return new Response(null, { status: 204 }); }
+  const day = parisDay(Date.now());
+  const hits = [];
+  if (TRACK_PAGES.includes(b.p)) hits.push(['page', b.p]);
+  if (b.prod && /^[\w-]{1,60}$/.test(b.prod)) hits.push(['produit', b.prod]);
+  if (b.add && /^[\w-]{1,60}$/.test(b.add)) hits.push(['ajout', b.add]);
+  if (b.v) {
+    hits.push(['visite', '']);
+    const src = String(b.src || 'direct').toLowerCase().replace(/^www\./, '').slice(0, 60);
+    hits.push(['source', /^[a-z0-9.-]+$/.test(src) ? src : 'autre']);
+    if (b.dev === 'mobile' || b.dev === 'ordinateur' || b.dev === 'tablette') hits.push(['appareil', b.dev]);
+  }
+  if (!hits.length) return new Response(null, { status: 204 });
+  await env.DB.batch(hits.slice(0, 6).map(([kind, key]) => env.DB.prepare(
+    'INSERT INTO stats (day, kind, key, n) VALUES (?, ?, ?, 1) ON CONFLICT(day, kind, key) DO UPDATE SET n = n + 1').bind(day, kind, key)));
+  return new Response(null, { status: 204 });
+}
+
+function parisDay(ts) {
+  return new Date(ts).toLocaleDateString('sv-SE', { timeZone: 'Europe/Paris' }); // AAAA-MM-JJ
+}
+
+/* ---------------------------------------------------------------- alertes */
+
+// Canaux configurés par des secrets Cloudflare (Settings → Variables and Secrets) :
+//  - e-mail via Resend : RESEND_API_KEY + ALERT_EMAIL (+ ALERT_FROM facultatif)
+//  - WhatsApp via CallMeBot : CALLMEBOT_PHONE + CALLMEBOT_APIKEY
+function alertChannels(env) {
+  return {
+    email: Boolean(env.RESEND_API_KEY && env.ALERT_EMAIL),
+    whatsapp: Boolean(env.CALLMEBOT_PHONE && env.CALLMEBOT_APIKEY),
+  };
+}
+
+async function notify(env, r, origin) {
+  const channels = alertChannels(env);
+  const label = r.kind === 'avis' ? 'Nouvel avis client à valider' : r.kind === 'contact' ? 'Nouveau message' : 'Nouvelle demande de devis';
+  const fmt = c => (c / 100).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
+  const lines = r.items.map(i => `${i.qty} × ${i.name} (${fmt(i.unit_cents)} ${i.label || ''})`);
+  const details = [
+    r.rating && `Note : ${'★'.repeat(r.rating)}${'☆'.repeat(5 - r.rating)}`,
+    r.phone && `Téléphone : ${r.phone}`, r.email && `E-mail : ${r.email}`,
+    r.event_type && `Occasion : ${r.event_type}`, r.event_date && `Date : ${r.event_date}`, r.delivery && `Retrait / livraison : ${r.delivery}`,
+  ].filter(Boolean);
+  const tasks = [];
+
+  if (channels.email) {
+    const e = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const html = `<div style="font-family:Georgia,serif;max-width:560px;margin:auto;color:#1e1812">
+      <div style="background:#050505;color:#d6b55d;padding:18px 22px;font-size:20px;letter-spacing:.04em">Saveurs des Rois</div>
+      <div style="border:1px solid #dcc08f;border-top:0;padding:22px;background:#fbf8f1">
+        <h2 style="margin:0 0 12px;font-size:20px">${e(label)} — ${e(r.name)}</h2>
+        <p style="margin:0 0 14px;line-height:1.6">${details.map(e).join('<br>')}</p>
+        ${lines.length ? `<table style="width:100%;border-collapse:collapse;margin:0 0 10px">${r.items.map(i => `<tr><td style="padding:6px 0;border-bottom:1px solid #e8dcc2">${i.qty} × ${e(i.name)}</td><td style="padding:6px 0;border-bottom:1px solid #e8dcc2;text-align:right">${fmt(i.qty * i.unit_cents)}</td></tr>`).join('')}</table>
+        <p style="margin:0 0 14px;text-align:right"><strong>Estimation : ${fmt(r.estimate_cents)}</strong></p>` : ''}
+        ${r.message ? `<p style="white-space:pre-wrap;background:#fff;border:1px solid #e8dcc2;padding:12px;border-radius:8px">${e(r.message)}</p>` : ''}
+        <p style="margin:20px 0 0"><a href="${origin}/admin/" style="background:#050505;color:#d6b55d;padding:10px 18px;border-radius:999px;text-decoration:none">Ouvrir l’espace administrateur</a></p>
+      </div></div>`;
+    tasks.push(fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: env.ALERT_FROM || 'Saveurs des Rois <onboarding@resend.dev>',
+        to: env.ALERT_EMAIL.split(',').map(s => s.trim()).filter(Boolean),
+        reply_to: r.email || undefined,
+        subject: `${label} — ${r.name}${r.estimate_cents ? ` (${fmt(r.estimate_cents)})` : ''}`,
+        html,
+        text: [label + ' — ' + r.name, ...details, ...lines, r.estimate_cents ? `Estimation : ${fmt(r.estimate_cents)}` : '', r.message, `${origin}/admin/`].filter(Boolean).join('\n'),
+      }),
+    }).then(async res => res.ok ? { channel: 'E-mail', ok: true } : { channel: 'E-mail', ok: false, error: (await res.json().catch(() => ({}))).message || `erreur ${res.status}` }));
+  }
+
+  if (channels.whatsapp) {
+    const text = [`*${label}* — ${r.name}`, ...details, ...lines, r.estimate_cents ? `Estimation : ${fmt(r.estimate_cents)}` : '', r.message && `« ${r.message.slice(0, 300)} »`, `${origin}/admin/`].filter(Boolean).join('\n');
+    const q = new URLSearchParams({ phone: env.CALLMEBOT_PHONE, apikey: env.CALLMEBOT_APIKEY, text });
+    tasks.push(fetch(`https://api.callmebot.com/whatsapp.php?${q}`)
+      .then(async res => res.ok ? { channel: 'WhatsApp', ok: true } : { channel: 'WhatsApp', ok: false, error: `erreur ${res.status}` }));
+  }
+
+  return Promise.all(tasks.map(t => t.catch(err => ({ channel: '?', ok: false, error: err.message }))));
 }
 
 /* ---------------------------------------------------------------- auth */
