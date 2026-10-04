@@ -6,7 +6,7 @@
   "engines": { "node": ">=20" },
   "scripts": {
     "check": "node scripts/check.mjs",
-    "deploy": "node scripts/check.mjs && wrangler deploy"
+    "deploy": "node scripts/check.mjs --workers && wrangler deploy"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"

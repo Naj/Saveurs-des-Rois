@@ -1,8 +1,9 @@
 {
-  // Saveurs des Rois — configuration Cloudflare Workers
+  // Saveurs des Rois — configuration pour Cloudflare Workers.
+  // (Avec Cloudflare Pages, ce fichier est ignoré : tout se règle dans le tableau de bord.)
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "saveurs-des-rois",
-  "main": "src/worker.js",
+  "main": "public/_worker.js",
   "compatibility_date": "2026-09-01",
   "assets": {
     "directory": "./public",

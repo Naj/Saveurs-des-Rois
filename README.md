@@ -9,7 +9,7 @@ Fonctionne **entièrement sur GitHub et Cloudflare** : aucune installation sur v
 ## Comment ça marche
 
 ```
-GitHub (code)  ──commit──▶  Cloudflare Workers Builds  ──▶  Site en ligne (Worker)
+GitHub (code)  ──commit──▶  Cloudflare Pages (ou Workers) ──▶  Site en ligne
                             installe et vérifie tout                  │
                             sur les serveurs Cloudflare               ▼
                                                               Base D1 (produits, devis,
@@ -18,19 +18,19 @@ GitHub (code)  ──commit──▶  Cloudflare Workers Builds  ──▶  Site
 
 - Chaque modification enregistrée sur GitHub republie le site automatiquement.
 - La base D1 est créée et remplie **automatiquement** à la première visite (5 recettes, textes). Les données modifiées dans l'admin ne sont jamais écrasées.
-- Un seul réglage secret : `ADMIN_PASSWORD`, dans le tableau de bord Cloudflare.
+- Réglages dans le tableau de bord Cloudflare uniquement : dossier de sortie `public`, liaison D1 `DB`, secret `ADMIN_PASSWORD`.
 
 ## Contenu du dépôt
 
 ```
 ├── GUIDE-MISE-EN-LIGNE.md   Pas à pas GitHub + Cloudflare
-├── wrangler.jsonc           Configuration Cloudflare (nom du site, base D1)
+├── wrangler.jsonc           Configuration (utilisée seulement en mode Workers)
 ├── package.json             Commande de publication utilisée par Cloudflare
 ├── package-lock.json        Versions exactes des outils (utilisé par Cloudflare)
-├── src/worker.js            API : catalogue, devis, administration, photos
-├── src/db-init.js           Structure et contenu initial de la base
 ├── scripts/check.mjs        Vérifications automatiques avant chaque publication
-└── public/                  Le site
+└── public/                  Le site (dossier publié)
+    ├── _worker.js                  Serveur : API, admin, base de données (créée automatiquement)
+    ├── _routes.json                Réserve le serveur aux adresses /api et /media
     ├── index.html, css/, js/       Pages publiques
     ├── admin/                      Espace administrateur
     ├── assets/img/                 Logo et photos

@@ -33,63 +33,59 @@ Vous obtenez un dossier `saveurs-des-rois` contenant notamment `public`, `src`, 
 
 1. **dash.cloudflare.com** → menu de gauche **Storage & Databases** → **D1 SQL Database** → **Create Database**.
 2. **Name** : `saveurs-des-rois` → **Create**.
-3. Sur la page de la base, copiez le **Database ID** (une suite du type `8a1c3f2e-…`).
 
-> Vous voulez réutiliser une base D1 existante ? Copiez simplement son Database ID et, à l'étape 4, remplacez aussi `"database_name": "saveurs-des-rois"` par son nom. Les tables du site s'ajoutent à côté de l'existant.
+> Vous pourrez aussi choisir une base D1 existante à l'étape 5 : les tables du site s'ajoutent à côté de l'existant.
 
 Vous n'avez **rien d'autre** à faire sur la base : le site crée ses tables et y place les 5 recettes tout seul, à la première visite.
 
 ---
 
-## Étape 4 — Relier la base au projet (dans GitHub)
+## Étape 4 — Créer le site dans Cloudflare Pages
 
-1. Dans votre dépôt GitHub, cliquez sur le fichier **`wrangler.jsonc`**.
-2. Cliquez sur l'icône **crayon** (✏️ *Edit this file*).
-3. Remplacez `REMPLACER-PAR-VOTRE-ID-D1` par le Database ID copié (gardez les guillemets) :
-   ```
-   "database_id": "8a1c3f2e-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-   ```
-4. **Commit changes…** → **Commit changes**.
-
----
-
-## Étape 5 — Connecter GitHub à Cloudflare (publication automatique)
-
-1. Cloudflare → **Workers & Pages** → **Create** (ou *Create application*).
-2. Onglet **Workers** → **Import a repository** (*Connect to Git*).
-3. Cliquez **Connect GitHub**, autorisez Cloudflare, puis donnez-lui accès au dépôt **saveurs-des-rois** (*Only select repositories*).
-4. Choisissez le dépôt **saveurs-des-rois** et réglez :
+1. Cloudflare → **Workers & Pages** → **Create** → onglet **Pages** → **Import an existing Git repository** (*Connect to Git*).
+2. Connectez GitHub si ce n'est pas fait et choisissez le dépôt **saveurs-des-rois** → **Begin setup**.
+3. Réglez **exactement** :
 
    | Champ | Valeur |
    |---|---|
-   | Project name | `saveurs-des-rois` *(doit être identique au nom dans wrangler.jsonc)* |
+   | Project name | `saveurs-des-rois` |
+   | Production branch | `main` |
+   | Framework preset | **None** |
    | Build command | *(laisser vide)* |
-   | Deploy command | `npm run deploy` |
-   | Root directory | *(laisser vide ou `/`)* |
+   | Build output directory | **`public`** |
+   | Root directory | *(laisser vide)* |
 
-5. **Save and Deploy** (ou *Create and deploy*).
+4. **Save and Deploy**.
 
-Cloudflare installe tout lui-même sur ses serveurs, vérifie le projet puis publie. Comptez 1 à 2 minutes.
+> ⚠️ Le champ **Build output directory = `public`** est indispensable. Sans lui, Cloudflare ne trouve pas le site et affiche « Page introuvable (404) ».
 
-✅ Vérification : le déploiement passe au vert et une adresse s'affiche :
-`https://saveurs-des-rois.<votre-compte>.workers.dev`
+---
+
+## Étape 5 — Relier la base de données au site
+
+1. **Workers & Pages** → **saveurs-des-rois** → onglet **Settings** → **Bindings** → **+ Add**.
+2. Choisissez **D1 database**.
+3. **Variable name** : `DB` (en majuscules, exactement) — **D1 database** : `saveurs-des-rois` → **Save**.
+
+Vous n'avez pas besoin du Database ID avec Pages, ni de modifier `wrangler.jsonc`.
 
 ---
 
 ## Étape 6 — Choisir le mot de passe de l'espace administrateur
 
-1. Cloudflare → **Workers & Pages** → **saveurs-des-rois** → onglet **Settings**.
-2. Section **Variables and Secrets** → **+ Add**.
-3. **Type** : **Secret** — **Variable name** : `ADMIN_PASSWORD` — **Value** : votre mot de passe (12 caractères minimum, unique).
-4. **Deploy** (ou *Save*).
+1. **Settings** → **Variables and Secrets** → **+ Add**.
+2. **Type** : **Secret** — **Variable name** : `ADMIN_PASSWORD` — **Value** : votre mot de passe (12 caractères minimum) → **Save**.
 
-> Les secrets restent en place à chaque nouvelle publication.
+Puis **republiez** pour que la base et le mot de passe soient pris en compte :
+onglet **Deployments** → sur la dernière ligne, menu **⋯** → **Retry deployment**.
+
+✅ Le site est disponible sur `https://saveurs-des-rois.pages.dev`.
 
 ---
 
 ## Étape 7 — Vérifier
 
-1. Ouvrez `https://saveurs-des-rois.<votre-compte>.workers.dev` : les 5 pâtisseries s'affichent.
+1. Ouvrez `https://saveurs-des-rois.pages.dev` : les 5 pâtisseries s'affichent.
 2. Ouvrez la même adresse suivie de **`/admin`** et connectez-vous.
 3. Envoyez-vous une demande de devis test depuis le site : elle apparaît dans l'onglet **Demandes** de l'admin.
 
@@ -99,7 +95,7 @@ Cloudflare installe tout lui-même sur ses serveurs, vérifie le projet puis pub
 
 ## Étape 8 — Votre nom de domaine (facultatif)
 
-**Workers & Pages → saveurs-des-rois → Settings → Domains & Routes → + Add → Custom domain** → tapez votre domaine (ex. `saveursdesrois.fr`), puis recommencez avec `www.saveursdesrois.fr`.
+**Workers & Pages → saveurs-des-rois → Custom domains → Set up a custom domain** → tapez votre domaine (ex. `saveursdesrois.fr`), puis recommencez avec `www.saveursdesrois.fr`.
 
 - Domaine déjà chez Cloudflare : c'est immédiat, HTTPS compris.
 - Domaine chez OVH, IONOS… : Cloudflare → **Add a domain** → offre **Free** → recopiez chez votre registraire les **deux serveurs de noms** indiqués. Une fois le domaine actif (quelques minutes à 24 h), faites la manipulation ci-dessus.
@@ -114,7 +110,7 @@ Cloudflare installe tout lui-même sur ses serveurs, vérifie le projet puis pub
 | Changer un prix, un texte, une photo, ajouter une vidéo, lire les demandes de devis | `https://votre-site/admin` — effet immédiat |
 | Modifier le code ou le design | GitHub → ouvrir le fichier → ✏️ → *Commit changes* : le site se republie tout seul en 1 à 2 minutes |
 | Remplacer un fichier (ex. la carte PDF) | GitHub → dossier `public/assets/docs` → **Add file → Upload files** → même nom de fichier → *Commit changes* |
-| Changer le mot de passe admin | Cloudflare → saveurs-des-rois → Settings → Variables and Secrets → modifier `ADMIN_PASSWORD` |
+| Changer le mot de passe admin | Cloudflare → saveurs-des-rois → Settings → Variables and Secrets → modifier `ADMIN_PASSWORD`, puis *Retry deployment* |
 | Voir si une publication a réussi | Cloudflare → saveurs-des-rois → onglet **Deployments** |
 
 ---
@@ -123,11 +119,14 @@ Cloudflare installe tout lui-même sur ses serveurs, vérifie le projet puis pub
 
 | Symptôme | Solution |
 |---|---|
-| Le déploiement échoue avec « database_id non renseigné » | Étape 4 : l'identifiant n'a pas été collé dans `wrangler.jsonc`. |
-| Échec « Could not find package.json » | Les fichiers ont été déposés dans un sous-dossier : `package.json` doit être à la racine du dépôt (étape 2). |
-| Échec mentionnant le nom du Worker | Le *Project name* (étape 5) doit être exactement `saveurs-des-rois`. |
-| L'admin affiche « Mot de passe non configuré » | Étape 6, puis recharger la page. |
-| Le site affiche « Aperçu hors ligne » | La base n'est pas reliée : vérifier le Database ID (étape 4). |
-| Une modification n'apparaît pas | Attendre la fin du déploiement (onglet Deployments), puis Ctrl + F5. |
+| « Cette page est introuvable » / HTTP ERROR 404 sur `pages.dev` | **Settings → Build** → *Build output directory* = `public`, puis *Retry deployment*. |
+| Le site affiche « Aperçu hors ligne » | La base n'est pas reliée : étape 5 (nom `DB` exact), puis *Retry deployment*. |
+| L'admin affiche « Mot de passe non configuré » | Étape 6, puis *Retry deployment*. |
+| Le déploiement échoue | **Deployments** → cliquer sur le déploiement → lire le journal (*build log*). |
+| Une modification n'apparaît pas | Attendre la fin du déploiement, puis Ctrl + F5. |
 
-Pour voir les détails d'une erreur : Cloudflare → saveurs-des-rois → **Deployments** → cliquer sur le déploiement → **View build log**.
+---
+
+## Alternative : Cloudflare Workers au lieu de Pages
+
+Le projet fonctionne aussi en Worker. **Workers & Pages → Create → Workers → Import a repository** ; *Deploy command* : `npm run deploy`. Il faut alors coller le **Database ID** de la base (visible dans la barre d'adresse de la page de la base, après `databases/`) dans `wrangler.jsonc` à la place de `REMPLACER-PAR-VOTRE-ID-D1`, et ajouter le secret `ADMIN_PASSWORD` dans *Settings → Variables and Secrets*.
