@@ -6,7 +6,7 @@ Fonctionne **entièrement sur GitHub et Cloudflare** : aucune installation sur v
 
 👉 **Mise en ligne pas à pas : [GUIDE-MISE-EN-LIGNE.md](GUIDE-MISE-EN-LIGNE.md)**
 
-## Comment ça marche 
+## Comment ça marche
 
 ```
 GitHub (code)  ──commit──▶  Cloudflare Pages (ou Workers) ──▶  Site en ligne
@@ -41,8 +41,11 @@ GitHub (code)  ──commit──▶  Cloudflare Pages (ou Workers) ──▶  S
 
 | Onglet | Ce que vous pouvez faire |
 |---|---|
-| Demandes | Demandes de devis et messages : statut, réponse par e-mail ou WhatsApp |
-| Produits | Nom, nom arabe, description, prix, seuil dégressif, photos, ingrédients, allergènes, valeurs nutritionnelles ; masquer, mettre en avant, ajouter, supprimer |
+| Demandes | Demandes de devis et messages : statut, réponse par e-mail ou WhatsApp ; état des alertes et envoi d'un test |
+| Produits | **Ajouter une recette** (fiche guidée ou copie d'une fiche existante, aperçu, liste « Prêt à publier ? ») ; nom, nom arabe, description, prix, seuil dégressif, photos, ingrédients, allergènes, valeurs nutritionnelles ; masquer, mettre en avant, ajouter, supprimer |
+| Galerie | Photos de vos événements (titre, occasion, légende), affichées sur la page « Vos événements » et l'accueil |
+| Avis | Valider, refuser, répondre aux avis ; ajouter un avis reçu par message |
+| Statistiques | Visites, pâtisseries consultées, ajouts au devis, demandes, provenance, appareils (mesure anonyme sans cookie) |
 | Textes & contact | Accueil, votre histoire, coordonnées, réseaux sociaux, mentions légales, musique d'ambiance |
 | Vidéos | Lien YouTube / Vimeo / .mp4, associable à un produit |
 | Photos | Import de photos (compressées automatiquement) |
@@ -52,4 +55,5 @@ GitHub (code)  ──commit──▶  Cloudflare Pages (ou Workers) ──▶  S
 - **Carte PDF** (`public/assets/docs/`) : image figée de vos fiches. Si un prix change, remplacez aussi ce PDF depuis GitHub.
 - **Photos importées dans l'admin** : stockées dans D1 (1,8 Mo max après compression). Pour un grand volume, prévoir Cloudflare R2.
 - **Musique d'ambiance** : désactivée par défaut, jamais lancée automatiquement. Uniquement une musique libre de droits ou sous licence.
+- **Alertes de devis** : e-mail (Resend) et/ou WhatsApp (CallMeBot), activées par des secrets Cloudflare — voir le guide.
 - **Mot de passe** : jamais dans le code. Il est stocké chez Cloudflare (secret `ADMIN_PASSWORD`).

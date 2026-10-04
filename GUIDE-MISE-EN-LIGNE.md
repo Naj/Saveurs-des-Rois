@@ -103,6 +103,82 @@ onglet **Deployments** → sur la dernière ligne, menu **⋯** → **Retry depl
 
 ---
 
+## Alertes de devis (e-mail et/ou WhatsApp)
+
+À chaque demande de devis ou message, le site peut vous prévenir. Tout se règle dans le navigateur ; les deux services sont gratuits pour cet usage. Vous pouvez activer l'un, l'autre ou les deux.
+
+### Par e-mail (service Resend)
+
+1. Créez un compte gratuit sur **resend.com**, avec **l'adresse e-mail qui doit recevoir les alertes**.
+2. Menu **API Keys → Create API Key** → nom : `saveurs-des-rois`, permission **Sending access** → **Add** → copiez la clé (elle commence par `re_`).
+3. Cloudflare → **Workers et Pages → saveurs-des-rois → Paramètres → Variables et secrets → + Ajouter**, type **Secret** :
+
+   | Nom | Valeur |
+   |---|---|
+   | `RESEND_API_KEY` | la clé copiée |
+   | `ALERT_EMAIL` | l'adresse du compte Resend |
+
+4. **Deployments** → dernier déploiement → **⋯ → Retry deployment**.
+
+> Sans nom de domaine vérifié, Resend n'envoie qu'à l'adresse de votre compte : c'est exactement ce qu'il faut pour des alertes. L'e-mail contient la sélection, l'estimation et le message ; **« Répondre » écrit directement au client**.
+> Quand vous aurez votre domaine : Resend → **Domains → Add Domain** (ajout automatique des DNS si le domaine est chez Cloudflare), puis ajoutez le secret `ALERT_FROM` = `Saveurs des Rois <devis@votredomaine.fr>`.
+
+### Par WhatsApp (service CallMeBot)
+
+1. Sur **callmebot.com**, rubrique *WhatsApp API*, notez le numéro du bot et la phrase d'activation indiqués.
+2. Depuis votre WhatsApp, envoyez cette phrase à ce numéro : vous recevez en retour votre **apikey**.
+3. Cloudflare → **Variables et secrets → + Ajouter**, type **Secret** :
+
+   | Nom | Valeur |
+   |---|---|
+   | `CALLMEBOT_PHONE` | votre numéro au format international, ex. `33612345678` |
+   | `CALLMEBOT_APIKEY` | l'apikey reçue |
+
+4. **Retry deployment**.
+
+### Vérifier
+
+Admin → onglet **Demandes** : le badge indique **🔔 Alertes actives**. Cliquez sur **Envoyer un test** : vous devez recevoir l'alerte dans la minute. En cas d'échec, le message d'erreur précise quel service a refusé l'envoi.
+
+---
+
+## Ajouter une nouvelle recette
+
+Admin → **Produits → Ajouter une recette**, puis choisissez :
+- **Fiche guidée vierge** : chaque champ affiche un exemple ; boutons pour les 14 allergènes réglementaires ; calcul automatique de l'énergie ;
+- **Partir d'une fiche existante** : reprend prix, seuil, composition et valeurs nutritionnelles d'une autre recette.
+
+Un aperçu de la carte et une liste « Prêt à publier ? » se mettent à jour pendant la saisie. La recette est créée **masquée** : cochez **Visible sur le site** quand tout est vert.
+
+---
+
+## Galerie « Vos événements » et avis clients
+
+La page **Vos événements** (menu du site) réunit vos photos d'événements, les avis publiés et un formulaire « Laisser un avis ». Un aperçu apparaît automatiquement sur l'accueil dès qu'il y a une photo ou un avis.
+
+**Ajouter une photo** : admin → **Galerie** → *Choisir une photo* (import depuis votre téléphone possible) → titre, occasion, légende → **Ajouter à la galerie**. Demandez toujours l'accord du client si des personnes ou un lieu privé sont visibles.
+
+**Gérer les avis** : admin → **Avis** (le badge indique les avis en attente). *Publier*, *Refuser* ou répondre publiquement. Vous recevez une alerte pour chaque nouvel avis si les alertes sont configurées.
+
+**Obtenir des avis** : dans **Demandes**, passez une commande en statut *confirmé* (ou *archivé*) : les liens **Demander un avis (WhatsApp / e-mail)** apparaissent, avec un message prêt à envoyer contenant le lien direct vers le formulaire.
+
+**Avis reçus par message** : admin → **Avis** → *Ajouter un avis reçu par message* (avec l'accord du client) ; ils sont signalés comme tels sur le site.
+
+> Règle à respecter (Code de la consommation) : le site indique que les avis sont modérés, leur date et leur ordre d'affichage. Ne publiez que des avis authentiques et ne retirez pas un avis uniquement parce qu'il est moins flatteur : répondez-y plutôt.
+
+---
+
+## Statistiques de visites
+
+Admin → **Statistiques** : visites, pages vues, pâtisseries les plus consultées, ajouts au devis, demandes de devis, taux de transformation, provenance des visiteurs (Instagram, Google, accès direct…) et appareils. Mesure **anonyme, sans cookie** : aucun bandeau de consentement n'est nécessaire.
+
+**Astuce** : pour savoir quelles publications vous amènent des visiteurs, partagez l'adresse du site en ajoutant `?utm_source=instagram` (ou `whatsapp`, `facebook`, `tiktok`…), par exemple :
+`https://saveurs-des-rois.pages.dev/?utm_source=instagram`
+
+**En complément (facultatif, 1 clic)** : Cloudflare → **Workers et Pages → saveurs-des-rois → Metrics** (*Métriques*) → **Web Analytics → Enable**. Vous obtenez aussi les pays, navigateurs et temps de chargement, toujours sans cookie.
+
+---
+
 ## Au quotidien
 
 | Je veux… | Où |
@@ -122,6 +198,7 @@ onglet **Deployments** → sur la dernière ligne, menu **⋯** → **Retry depl
 | « Cette page est introuvable » / HTTP ERROR 404 sur `pages.dev` | **Settings → Build** → *Build output directory* = `public`, puis *Retry deployment*. |
 | Le site affiche « Aperçu hors ligne » | La base n'est pas reliée : étape 5 (nom `DB` exact), puis *Retry deployment*. |
 | L'admin affiche « Mot de passe non configuré » | Étape 6, puis *Retry deployment*. |
+| « Alertes non configurées » alors que les secrets existent | Les secrets sont pris en compte au déploiement suivant : *Retry deployment*. |
 | Le déploiement échoue | **Deployments** → cliquer sur le déploiement → lire le journal (*build log*). |
 | Une modification n'apparaît pas | Attendre la fin du déploiement, puis Ctrl + F5. |
 
