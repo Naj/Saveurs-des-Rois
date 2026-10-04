@@ -6,7 +6,7 @@ Fonctionne **entièrement sur GitHub et Cloudflare** : aucune installation sur v
 
 👉 **Mise en ligne pas à pas : [GUIDE-MISE-EN-LIGNE.md](GUIDE-MISE-EN-LIGNE.md)**
 
-## Comment ça marche
+## Comment ça marche 
 
 ```
 GitHub (code)  ──commit──▶  Cloudflare Pages (ou Workers) ──▶  Site en ligne
