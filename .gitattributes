@@ -1,0 +1,6 @@
+# Fins de ligne homogènes (Windows / macOS / Linux)
+* text=auto eol=lf
+*.webp binary
+*.png binary
+*.jpg binary
+*.pdf binary

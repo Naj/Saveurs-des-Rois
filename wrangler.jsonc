@@ -1,0 +1,22 @@
+{
+  // Saveurs des Rois — configuration Cloudflare Workers
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "saveurs-des-rois",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "not_found_handling": "404-page"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "saveurs-des-rois",
+      // Collez ici le « Database ID » de la base créée dans Cloudflare
+      // (Storage & Databases → D1). Ce n'est pas un secret.
+      "database_id": "REMPLACER-PAR-VOTRE-ID-D1"
+    }
+  ],
+  "observability": { "enabled": true }
+}

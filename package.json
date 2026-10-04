@@ -1,0 +1,14 @@
+{
+  "name": "saveurs-des-rois",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Site vitrine Saveurs des Rois — pâtisseries orientales artisanales",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "check": "node scripts/check.mjs",
+    "deploy": "node scripts/check.mjs && wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

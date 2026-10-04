@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Administration — Saveurs des Rois</title>
+  <link rel="icon" type="image/png" href="/assets/img/favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Amiri&family=Cinzel:wght@600&family=EB+Garamond:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/site.css">
+  <link rel="stylesheet" href="/admin/admin.css">
+</head>
+<body class="adm">
+  <header class="top">
+    <div class="top__inner">
+      <a class="brand" href="/" target="_blank" rel="noopener" title="Voir le site">
+        <img src="/assets/img/logo-mark.webp" alt="" width="30" height="46"><span>Administration</span>
+      </a>
+      <button class="btn btn--ligne adm-out" id="logout" hidden>Se déconnecter</button>
+    </div>
+  </header>
+
+  <main class="wrap" id="app">
+    <section class="adm-login" id="login" hidden>
+      <h1>Espace administrateur</h1>
+      <form id="loginForm" class="panneau">
+        <div class="message message--err" id="loginMsg" hidden></div>
+        <div class="champ"><label for="pw">Mot de passe</label><input id="pw" type="password" autocomplete="current-password" required></div>
+        <button class="btn btn--or" type="submit" style="width:100%">Se connecter</button>
+      </form>
+    </section>
+
+    <section id="dash" hidden>
+      <nav class="adm-tabs" role="tablist">
+        <button role="tab" data-tab="demandes" aria-selected="true">Demandes <span class="badge" id="newCount" hidden></span></button>
+        <button role="tab" data-tab="produits">Produits</button>
+        <button role="tab" data-tab="textes">Textes &amp; contact</button>
+        <button role="tab" data-tab="videos">Vidéos</button>
+        <button role="tab" data-tab="medias">Photos</button>
+      </nav>
+      <div id="panel"></div>
+    </section>
+  </main>
+
+  <dialog id="picker" class="adm-dialog">
+    <form method="dialog" class="adm-dialog__head"><h2>Choisir une photo</h2><button class="lien" value="cancel">Fermer</button></form>
+    <label class="btn btn--sombre adm-upload">Importer une photo<input type="file" accept="image/*" id="pickerUpload" hidden></label>
+    <p class="note">Les photos importées sont automatiquement redimensionnées et compressées.</p>
+    <div class="adm-gal" id="pickerGrid"></div>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="/admin/admin.js" type="module"></script>
+</body>
+</html>

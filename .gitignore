@@ -1,0 +1,15 @@
+# Dépendances et caches
+node_modules/
+.wrangler/
+.npm/
+
+# Secrets locaux — ne jamais committer
+.dev.vars
+.env
+.env.*
+
+# Systèmes
+.DS_Store
+Thumbs.db
+desktop.ini
+*.log
