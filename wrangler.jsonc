@@ -13,7 +13,7 @@
     {
       "binding": "DB",
       "database_name": "saveurs-des-rois",
-      // Collez ici le « Database ID » de la base créée dans Cloudflare
+      // b4d0b558-db60-49c1-ac4e-724f3840953e
       // (Storage & Databases → D1). Ce n'est pas un secret.
       "database_id": "REMPLACER-PAR-VOTRE-ID-D1"
     }
