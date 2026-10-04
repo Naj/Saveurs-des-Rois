@@ -1,0 +1,12 @@
+# En-têtes HTTP (Cloudflare Pages et Workers)
+# Les fichiers du site sont revérifiés à chaque visite : une mise à jour est visible immédiatement.
+/js/*
+  Cache-Control: no-cache
+/css/*
+  Cache-Control: no-cache
+/admin/*
+  Cache-Control: no-cache
+  X-Robots-Tag: noindex
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin

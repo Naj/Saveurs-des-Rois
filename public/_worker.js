@@ -291,6 +291,7 @@ const PUBLIC_SETTINGS = [
   'contact_phone', 'contact_whatsapp', 'contact_email', 'contact_instagram', 'contact_facebook',
   'contact_tiktok', 'contact_zone', 'contact_hours', 'music_url', 'legal_text',
 ];
+const APP_VERSION = '2.4';
 const GALLERY_FIELDS = ['image', 'title', 'event_type', 'caption', 'visible', 'position'];
 const REVIEW_STATUSES = ['en attente', 'publié', 'refusé'];
 const TRACK_PAGES = ['accueil', 'collection', 'p', 'histoire', 'evenements', 'avis', 'videos', 'contact', 'devis', 'mentions'];
@@ -393,6 +394,12 @@ async function adminApi(request, env, p, m) {
       settings: Object.fromEntries(settings.results.map(r => [r.key, r.value])),
       requestCounts: Object.fromEntries(counts.results.map(r => [r.status, r.n])),
       alerts: alertChannels(env),
+      alertTargets: {
+        email: env.ALERT_EMAIL ? env.ALERT_EMAIL.split(',').map(maskEmail).join(', ') : '',
+        whatsapp: env.CALLMEBOT_PHONE ? String(env.CALLMEBOT_PHONE).replace(/\d(?=\d{2})/g, '•') : '',
+        from: env.ALERT_FROM || '',
+      },
+      version: APP_VERSION,
       gallery: gallery.results,
       pendingReviews: pending?.n || 0,
     });
@@ -686,6 +693,10 @@ function parisDay(ts) {
 // Canaux configurés par des secrets Cloudflare (Settings → Variables and Secrets) :
 //  - e-mail via Resend : RESEND_API_KEY + ALERT_EMAIL (+ ALERT_FROM facultatif)
 //  - WhatsApp via CallMeBot : CALLMEBOT_PHONE + CALLMEBOT_APIKEY
+function maskEmail(e) {
+  const [u, d] = String(e).trim().split('@');
+  return d ? `${u.slice(0, 2)}${'•'.repeat(Math.max(1, u.length - 2))}@${d}` : '';
+}
 function alertChannels(env) {
   return {
     email: Boolean(env.RESEND_API_KEY && env.ALERT_EMAIL),

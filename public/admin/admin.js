@@ -46,6 +46,7 @@ async function start() {
 function countNew() {
   const n = st.requests.filter(r => r.status === 'nouveau').length; const b = $('#newCount'); b.textContent = n; b.hidden = !n;
   const a = st.reviews.filter(r => r.status === 'en attente').length; const c = $('#avisCount'); c.textContent = a; c.hidden = !a;
+  const al = st.alerts || {}; $('#alertDot').hidden = Boolean(st.version && (al.email || al.whatsapp));
 }
 
 document.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => {
@@ -55,7 +56,7 @@ document.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click',
 }));
 
 function render() {
-  const fn = { demandes: tDemandes, produits: tProduits, galerie: tGalerie, avis: tAvis, stats: tStats, textes: tTextes, videos: tVideos, medias: tMedias }[st.tab];
+  const fn = { alertes: tAlertes, demandes: tDemandes, produits: tProduits, galerie: tGalerie, avis: tAvis, stats: tStats, textes: tTextes, videos: tVideos, medias: tMedias }[st.tab];
   $('#panel').innerHTML = fn();
   if (st.tab === 'medias') loadMedia();
   if (st.tab === 'stats') loadStats().catch(e => { $('#statsZone').innerHTML = `<p class="message message--err">${esc(e.message)}</p>`; });
@@ -71,12 +72,44 @@ function demandeAvisLien(r) {
   return [tel && `<a href="https://wa.me/${tel}?text=${encodeURIComponent(texte)}" target="_blank" rel="noopener">Demander un avis (WhatsApp)</a>`,
     r.email && `<a href="mailto:${esc(r.email)}?subject=${encodeURIComponent('Votre avis compte pour nous')}&body=${encodeURIComponent(texte)}">Demander un avis (e-mail)</a>`].filter(Boolean).join('');
 }
+const ADMIN_VERSION = '2.4';
 function alertBanner() {
+  if (!st.version) return `<button class="adm-alerte adm-alerte--warn" data-goto="alertes">⚠️ Serveur du site pas à jour — voir l’onglet Alertes</button>`;
   const a = st.alerts || {};
   const on = [a.email && 'e-mail', a.whatsapp && 'WhatsApp'].filter(Boolean);
   return on.length
-    ? `<span class="adm-alerte adm-alerte--on">🔔 Alertes actives : ${on.join(' + ')} <button class="lien" id="testAlert">Envoyer un test</button></span>`
-    : `<span class="adm-alerte">🔕 Alertes non configurées — voir le guide, section « Alertes de devis »</span>`;
+    ? `<button class="adm-alerte adm-alerte--on" data-goto="alertes">🔔 Alertes actives : ${on.join(' + ')}</button>`
+    : `<button class="adm-alerte" data-goto="alertes">🔕 Alertes de devis désactivées — les activer</button>`;
+}
+
+/* ---------------- Alertes de devis */
+function tAlertes() {
+  const a = st.alerts || {}, t = st.alertTargets || {};
+  const aucun = !a.email && !a.whatsapp;
+  const carte = (titre, actif, cible, etapes) => `
+    <section class="adm-item adm-canal ${actif ? 'adm-canal--on' : ''}">
+      <header><h2 style="font-size:1.15rem;margin:0">${titre}</h2><span class="adm-pastille">${actif ? '● Actif' : '○ Non configuré'}</span></header>
+      ${actif ? `<p class="adm-meta" style="margin:.4rem 0 0">Destinataire : <strong>${esc(cible)}</strong></p>` : `<ol class="adm-etapes">${etapes}</ol>`}
+    </section>`;
+  return `
+  <h1>Alertes de devis</h1>
+  ${!st.version ? `<div class="message message--err"><strong>Le serveur du site n’est pas à jour.</strong> Vérifiez sur GitHub que le fichier <code>public/_worker.js</code> a bien été remplacé, attendez la fin du déploiement dans Cloudflare, puis rechargez cette page (Ctrl + F5).</div>` : ''}
+  <p>À chaque demande de devis, message ou nouvel avis, le site peut vous prévenir par e-mail et/ou WhatsApp. Les réglages se font dans Cloudflare (secrets), pas ici : cette page vous indique l’état et permet d’envoyer un test.</p>
+  <div class="adm-test">
+    <button class="btn btn--or" id="testAlert" ${aucun ? 'disabled' : ''}>Envoyer une alerte de test</button>
+    <span class="note">${aucun ? 'Activez d’abord au moins un canal ci-dessous.' : 'Vous devez la recevoir dans la minute.'}</span>
+  </div>
+  ${carte('📧 Par e-mail (Resend)', a.email, t.email, `
+    <li>Créez un compte gratuit sur <a href="https://resend.com" target="_blank" rel="noopener">resend.com</a> avec l’adresse qui doit recevoir les alertes.</li>
+    <li>Menu <strong>API Keys → Create API Key</strong> (permission <em>Sending access</em>) et copiez la clé <code>re_…</code>.</li>
+    <li>Cloudflare → <strong>Workers et Pages → saveurs-des-rois → Paramètres → Variables et secrets → + Ajouter</strong>, type <strong>Secret</strong> :<br><code>RESEND_API_KEY</code> = la clé — <code>ALERT_EMAIL</code> = votre adresse.</li>
+    <li>Onglet <strong>Deployments</strong> → dernier déploiement → <strong>⋯ → Retry deployment</strong>, puis rechargez cette page.</li>`)}
+  ${carte('💬 Par WhatsApp (CallMeBot)', a.whatsapp, t.whatsapp, `
+    <li>Sur <a href="https://www.callmebot.com/blog/free-api-whatsapp-messages/" target="_blank" rel="noopener">callmebot.com</a>, notez le numéro du bot et la phrase d’activation.</li>
+    <li>Envoyez cette phrase depuis votre WhatsApp à ce numéro : vous recevez votre <strong>apikey</strong>.</li>
+    <li>Cloudflare → <strong>Variables et secrets → + Ajouter</strong>, type <strong>Secret</strong> :<br><code>CALLMEBOT_PHONE</code> = votre numéro au format 33612345678 — <code>CALLMEBOT_APIKEY</code> = l’apikey.</li>
+    <li><strong>Retry deployment</strong>, puis rechargez cette page.</li>`)}
+  <p class="note">Version de l’administration : ${ADMIN_VERSION} · serveur : ${esc(st.version || 'ancien')}</p>`;
 }
 function tDemandes() {
   const list = st.requests.filter(r => st.filter === 'toutes' || (st.filter === 'actives' ? r.status !== 'archivé' : r.status === st.filter));
@@ -559,6 +592,8 @@ panel.addEventListener('click', e => {
     await api(`/api/admin/gallery/${t.dataset.delgalerie}`, { method: 'DELETE' });
     st.gallery = st.gallery.filter(g => g.id !== +t.dataset.delgalerie); render();
   }, 'Photo retirée.');
+  const go = t.closest('[data-goto]');
+  if (go) { document.querySelector(`[data-tab="${go.dataset.goto}"]`).click(); return; }
   if (t.id === 'testAlert') return run(async () => { const r = await api('/api/admin/test-alert', { method: 'POST' }); toast(`Alerte de test envoyée (${r.sent.join(' + ')}).`); });
   if (t.dataset.pick) { openPicker(t.dataset.pick); return; }
   if (t.classList.contains('x')) { t.closest('figure').remove(); return; }

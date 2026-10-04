@@ -138,7 +138,9 @@ onglet **Deployments** → sur la dernière ligne, menu **⋯** → **Retry depl
 
 ### Vérifier
 
-Admin → onglet **Demandes** : le badge indique **🔔 Alertes actives**. Cliquez sur **Envoyer un test** : vous devez recevoir l'alerte dans la minute. En cas d'échec, le message d'erreur précise quel service a refusé l'envoi.
+Admin → onglet **Alertes** : chaque canal affiche **● Actif** ou **○ Non configuré** (avec les étapes à suivre). Cliquez sur **Envoyer une alerte de test** : vous devez la recevoir dans la minute. En cas d'échec, le message précise quel service a refusé l'envoi.
+
+> Si l'onglet Alertes n'apparaît pas ou affiche « Serveur du site pas à jour » : vérifiez sur GitHub que `public/_worker.js` et le dossier `public/admin` ont bien été remplacés, attendez la fin du déploiement, puis rechargez avec Ctrl + F5.
 
 ---
 

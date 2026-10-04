@@ -9,8 +9,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Amiri&family=Cinzel:wght@600&family=EB+Garamond:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/site.css">
-  <link rel="stylesheet" href="/admin/admin.css">
+  <link rel="stylesheet" href="/css/site.css?v=2.4">
+  <link rel="stylesheet" href="/admin/admin.css?v=2.4">
 </head>
 <body class="adm">
   <header class="top">
@@ -39,6 +39,7 @@
         <button role="tab" data-tab="galerie">Galerie</button>
         <button role="tab" data-tab="avis">Avis <span class="badge" id="avisCount" hidden></span></button>
         <button role="tab" data-tab="stats">Statistiques</button>
+        <button role="tab" data-tab="alertes">Alertes <span id="alertDot" class="adm-dot" hidden></span></button>
         <button role="tab" data-tab="textes">Textes &amp; contact</button>
         <button role="tab" data-tab="videos">Vidéos</button>
         <button role="tab" data-tab="medias">Photos</button>
@@ -55,6 +56,6 @@
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="/admin/admin.js" type="module"></script>
+  <script src="/admin/admin.js?v=2.4" type="module"></script>
 </body>
 </html>

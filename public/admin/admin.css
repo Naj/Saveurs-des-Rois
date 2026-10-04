@@ -134,3 +134,17 @@ button.adm-choix__btn:hover { border-color: var(--or-profond); box-shadow: 0 0 0
 .adm-table td { border-bottom: 1px solid #efe4cc; padding: .4rem .2rem; }
 .adm-table .num, .adm-table th + th { text-align: right; font-variant-numeric: tabular-nums; }
 .adm-gal-item .adm-img img { width: 120px; height: 120px; }
+
+/* ================= Alertes ================= */
+button.adm-alerte { border: 0; font: inherit; font-size: .95rem; cursor: pointer; }
+.adm-alerte--warn { background: #f7e3e1; color: var(--err); }
+.adm-test { display: flex; flex-wrap: wrap; gap: .8rem 1.2rem; align-items: center; margin: 1.2rem 0 1.5rem; }
+.adm-canal { margin-bottom: .9rem; }
+.adm-canal header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+.adm-pastille { font-size: .92rem; padding: .2rem .7rem; border-radius: 999px; background: #efe6d2; color: var(--encre-douce); white-space: nowrap; }
+.adm-canal--on { border-left: 5px solid var(--ok); }
+.adm-canal--on .adm-pastille { background: #e4efe0; color: var(--ok); }
+.adm-etapes { margin: .7rem 0 .2rem; padding-left: 1.3rem; display: grid; gap: .45rem; }
+.adm-etapes code, .adm .message code { background: #f3ead6; padding: .05em .35em; border-radius: 4px; font-size: .92em; }
+.adm-dot { width: .55rem; height: .55rem; border-radius: 50%; background: var(--err); display: inline-block; }
+.adm-dot[hidden] { display: none; }
