@@ -72,7 +72,7 @@ function demandeAvisLien(r) {
   return [tel && `<a href="https://wa.me/${tel}?text=${encodeURIComponent(texte)}" target="_blank" rel="noopener">Demander un avis (WhatsApp)</a>`,
     r.email && `<a href="mailto:${esc(r.email)}?subject=${encodeURIComponent('Votre avis compte pour nous')}&body=${encodeURIComponent(texte)}">Demander un avis (e-mail)</a>`].filter(Boolean).join('');
 }
-const ADMIN_VERSION = '2.4';
+const ADMIN_VERSION = '2.5';
 function alertBanner() {
   if (!st.version) return `<button class="adm-alerte adm-alerte--warn" data-goto="alertes">⚠️ Serveur du site pas à jour — voir l’onglet Alertes</button>`;
   const a = st.alerts || {};
@@ -129,7 +129,7 @@ function tDemandes() {
         <span class="adm-meta">${new Date(r.created_at + 'Z').toLocaleString('fr-FR', { dateStyle: 'medium', timeStyle: 'short' })}</span>
       </header>
       <p class="adm-meta">${[r.phone && `<a href="tel:${esc(r.phone)}">${esc(r.phone)}</a>`, r.email && `<a href="mailto:${esc(r.email)}">${esc(r.email)}</a>`, r.event_type, r.event_date && 'le ' + new Date(r.event_date).toLocaleDateString('fr-FR'), r.delivery].filter(Boolean).join(' · ')}</p>
-      ${r.items.length ? `<ul>${r.items.map(i => `<li>${i.qty} × ${esc(i.name)} (${euro(i.unit_cents)} ${esc(i.label || '')})</li>`).join('')}</ul><p><strong>Estimation : ${euro(r.estimate_cents)}</strong></p>` : ''}
+      ${r.items.length ? `<ul>${r.items.map(i => `<li>${i.unit === 'kg' ? `${String(i.qty).replace('.', ',')} kg de` : `${i.qty} ×`} ${esc(i.name)} (${i.unit_cents ? euro(i.unit_cents) + ' ' : ''}${esc(i.label || '')})${i.unit === 'kg' ? ' <strong class="adm-pro">PRO</strong>' : ''}</li>`).join('')}</ul><p><strong>Estimation : ${euro(r.estimate_cents)}</strong></p>` : ''}
       ${r.message ? `<p style="white-space:pre-wrap">${esc(r.message)}</p>` : ''}
       <div class="adm-actions">
         <select data-status="${r.id}" aria-label="Statut">${STATUSES.map(s => `<option ${s === r.status ? 'selected' : ''}>${s}</option>`).join('')}</select>
@@ -168,7 +168,7 @@ function tProduits() {
   <div class="adm-prods">
     <div class="adm-plist">
       ${st.current === '__new' ? `<button aria-current="true"><img src="/assets/img/favicon.png" alt=""><span>Nouvelle recette<br><small>brouillon</small></span></button>` : ''}
-      ${st.products.map(x => `<button data-prod="${esc(x.id)}" aria-current="${x.id === st.current}" class="${x.visible ? '' : 'adm-off'}"><img src="${esc(x.image || '/assets/img/favicon.png')}" alt=""><span>${esc(x.name)}<br><small>${euro(x.price_cents)}${x.visible ? '' : ' · masqué'}</small></span>${x.featured ? '<small title="Mis en avant">★</small>' : ''}</button>`).join('')}
+      ${st.products.map(x => `<button data-prod="${esc(x.id)}" aria-current="${x.id === st.current}" class="${x.visible ? '' : 'adm-off'}"><img src="${esc(x.image || '/assets/img/favicon.png')}" alt=""><span>${esc(x.name)}<br><small>${prixListe(x)}${x.visible ? '' : ' · masqué'}</small></span>${x.featured ? '<small title="Mis en avant">★</small>' : ''}</button>`).join('')}
     </div>
     ${body}
   </div>`;
@@ -200,7 +200,7 @@ function startDraft(mode) {
     ingredients: '', allergens: '', traces: '', image: '', gallery: [], visible: 0, featured: 0, position: (st.products.length + 1) * 10 };
   if (mode === 'copy') {
     const src = st.products.find(p => p.id === $('#copyFrom').value);
-    for (const k of ['price_cents', 'price_label', 'threshold', 'ingredients', 'allergens', 'traces', 'energy_kcal', 'proteins', 'carbs', 'fats', 'salt']) base[k] = src[k];
+    for (const k of ['price_mode', 'price_cents', 'price_kg_cents', 'min_kg', 'price_label', 'threshold', 'ingredients', 'allergens', 'traces', 'energy_kcal', 'proteins', 'carbs', 'fats', 'salt']) base[k] = src[k];
     base.copiedFrom = src.name;
   }
   st.draft = base;
@@ -209,10 +209,28 @@ function startDraft(mode) {
 function checklist(p) {
   const has = v => v != null && String(v).trim() !== '';
   return [
-    ['Nom', has(p.name), true], ['Prix', has(p.price_cents) && p.price_cents > 0, true], ['Photo principale', has(p.image), true],
+    ['Nom', has(p.name), true], ['Prix', prixOk(p), true], ['Photo principale', has(p.image), true],
     ['Description', has(p.description), true], ['Ingrédients', has(p.ingredients), true], ['Allergènes', has(p.allergens), true],
     ['Valeurs nutritionnelles', ['energy_kcal', 'proteins', 'carbs', 'fats', 'salt'].every(k => has(p[k])), false],
   ];
+}
+function prixOk(p) {
+  const m = p.price_mode || 'piece';
+  const piece = p.price_cents > 0, kg = p.price_kg_cents > 0;
+  return m === 'devis' || (m === 'piece' && piece) || (m === 'kg' && kg) || (m === 'both' && piece && kg);
+}
+function apercuPrix(p) {
+  const m = p.price_mode || 'piece';
+  const piece = `<p class="carte__prix"><strong>${p.price_cents ? euro(p.price_cents) : '— €'}</strong> ${esc(p.price_label || 'la pièce')}</p>${p.threshold ? `<p class="carte__seuil">Prix dégressif à partir de ${esc(p.threshold)} pièces</p>` : ''}`;
+  const kg = `<strong>${p.price_kg_cents ? euro(p.price_kg_cents) : '— €'}</strong> le kg`;
+  if (m === 'devis') return '<p class="carte__prix"><strong>Prix sur devis</strong></p>';
+  if (m === 'kg') return `<p class="carte__prix">${kg}</p><p class="carte__seuil">Professionnels · vente au poids</p>`;
+  if (m === 'both') return `${piece}<p class="carte__seuil">Pros : ${kg}</p>`;
+  return piece;
+}
+function prixListe(x) {
+  const m = x.price_mode || 'piece';
+  return m === 'devis' ? 'sur devis' : m === 'kg' ? `${euro(x.price_kg_cents)} /kg` : m === 'both' ? `${euro(x.price_cents)} · ${euro(x.price_kg_cents)} /kg` : euro(x.price_cents);
 }
 function checklistHtml(p) {
   return checklist(p).map(([label, ok, req]) => `<li class="${ok ? 'ok' : req ? 'manque' : 'conseil'}">${ok ? '✓' : req ? '✗' : '○'} ${label}${!ok && !req ? ' <small>(recommandé)</small>' : ''}</li>`).join('');
@@ -240,11 +258,29 @@ function formProduit(p) {
         <label class="adm-check"><input type="checkbox" name="featured" ${p.featured ? 'checked' : ''}> Mis en avant sur l’accueil</label>
       </div>
     </fieldset>
-    <fieldset class="adm-fieldset"><legend>2. Prix</legend>
-      <div class="trois">
-        <div class="champ"><label for="p-price">Prix (€)</label><input id="p-price" name="price" inputmode="decimal" value="${prix}" placeholder="Ex : 0,80" required></div>
-        ${f('price_label', 'Unité affichée', 'text', 'placeholder="la pièce"')}
-        ${f('threshold', 'Prix dégressif à partir de (pièces)', 'number', 'min="0" placeholder="Ex : 12"')}
+    <fieldset class="adm-fieldset" data-mode="${esc(p.price_mode || 'piece')}" id="prixBloc"><legend>2. Prix</legend>
+      <p class="adm-sous">Affichage du prix sur le site</p>
+      <div class="adm-modes" role="radiogroup">
+        ${[['piece', 'À la pièce', 'Particuliers, avec prix dégressif possible'],
+           ['kg', 'Au kilo', 'Professionnels, vente au poids sans dégressivité'],
+           ['both', 'Les deux', 'Pièce pour les particuliers + kilo pour les pros'],
+           ['devis', 'Sur devis', 'Aucun prix affiché']].map(([v, t, d]) => `
+          <label class="adm-mode"><input type="radio" name="price_mode" value="${v}" ${(p.price_mode || 'piece') === v ? 'checked' : ''}><span><strong>${t}</strong><small>${d}</small></span></label>`).join('')}
+      </div>
+      <div class="si-piece">
+        <p class="adm-sous">Particuliers · à la pièce</p>
+        <div class="trois">
+          <div class="champ"><label for="p-price">Prix (€)</label><input id="p-price" name="price" inputmode="decimal" value="${prix}" placeholder="Ex : 0,80"></div>
+          ${f('price_label', 'Unité affichée', 'text', 'placeholder="la pièce"')}
+          ${f('threshold', 'Prix dégressif à partir de (pièces)', 'number', 'min="0" placeholder="Ex : 12 (vide = aucun)"')}
+        </div>
+      </div>
+      <div class="si-kg">
+        <p class="adm-sous">Professionnels · au poids <small>(prix fixe, jamais de dégressivité)</small></p>
+        <div class="deux">
+          <div class="champ"><label for="p-pricekg">Prix au kilo (€)</label><input id="p-pricekg" name="price_kg" inputmode="decimal" value="${p.price_kg_cents == null ? '' : (p.price_kg_cents / 100).toFixed(2).replace('.', ',')}" placeholder="Ex : 32,00"></div>
+          <div class="champ"><label for="p-minkg">Commande minimale (kg, facultatif)</label><input id="p-minkg" name="min_kg" inputmode="decimal" value="${p.min_kg == null ? '' : String(p.min_kg).replace('.', ',')}" placeholder="Ex : 2"></div>
+        </div>
       </div>
       ${f('position', 'Ordre d’affichage (plus petit = en premier)', 'number')}
     </fieldset>
@@ -278,7 +314,8 @@ function formProduit(p) {
 function formSnapshot(form) {
   const d = Object.fromEntries(new FormData(form));
   const price = parseFloat(String(d.price || '').replace(',', '.'));
-  return { ...d, price_cents: Number.isFinite(price) ? Math.round(price * 100) : null };
+  const pkg = parseFloat(String(d.price_kg || '').replace(',', '.'));
+  return { ...d, price_cents: Number.isFinite(price) ? Math.round(price * 100) : null, price_kg_cents: Number.isFinite(pkg) ? Math.round(pkg * 100) : null };
 }
 function refreshProdHelpers() {
   const form = $('#prodForm'); if (!form) return;
@@ -288,8 +325,7 @@ function refreshProdHelpers() {
     <div class="arche"><img src="${esc(p.image || '/assets/img/logo-transparent.webp')}" alt=""></div>
     <h3>${esc(p.name || 'Nom de la recette')}</h3>
     <p class="carte__ar" lang="ar" dir="rtl">${esc(p.arabic_name || '')}</p>
-    <p class="carte__prix"><strong>${p.price_cents ? euro(p.price_cents) : '— €'}</strong> ${esc(p.price_label || 'la pièce')}</p>
-    ${p.threshold ? `<p class="carte__seuil">Prix dégressif à partir de ${esc(p.threshold)} pièces</p>` : ''}`;
+    ${apercuPrix(p)}`;
   checkKcal(form);
 }
 const galItem = src => `<figure data-g="${esc(src)}"><img src="${esc(src)}" alt=""><button type="button" class="x" aria-label="Retirer">×</button></figure>`;
@@ -297,16 +333,20 @@ const galItem = src => `<figure data-g="${esc(src)}"><img src="${esc(src)}" alt=
 function readProdForm(form) {
   const fd = new FormData(form);
   const d = Object.fromEntries(fd);
+  const eur = v => { const n = parseFloat(String(v ?? '').replace(',', '.')); return Number.isFinite(n) ? Math.round(n * 100) : null; };
+  const mode = d.price_mode || 'piece';
   const out = {
     name: d.name.trim(), arabic_name: d.arabic_name, tagline: d.tagline, description: d.description,
-    price_cents: Math.round(parseFloat(String(d.price).replace(',', '.')) * 100),
+    price_mode: mode, price_cents: eur(d.price) ?? 0, price_kg_cents: eur(d.price_kg),
+    min_kg: d.min_kg ? parseFloat(String(d.min_kg).replace(',', '.')) || null : null,
     price_label: d.price_label || 'la pièce', threshold: d.threshold || null, position: d.position || 0,
     ingredients: d.ingredients, allergens: d.allergens, traces: d.traces,
     energy_kcal: d.energy_kcal, proteins: d.proteins, carbs: d.carbs, fats: d.fats, salt: d.salt,
     image: d.image, gallery: [...form.querySelectorAll('#gal figure')].map(f => f.dataset.g),
     visible: fd.has('visible') ? 1 : 0, featured: fd.has('featured') ? 1 : 0,
   };
-  if (!Number.isFinite(out.price_cents)) throw new Error('Prix invalide (ex : 0,70).');
+  if (['piece', 'both'].includes(mode) && !(out.price_cents > 0)) throw new Error('Indiquez le prix à la pièce (ex : 0,70).');
+  if (['kg', 'both'].includes(mode) && !(out.price_kg_cents > 0)) throw new Error('Indiquez le prix au kilo (ex : 32,00).');
   if (!out.name) throw new Error('Le nom est obligatoire.');
   return out;
 }
@@ -554,7 +594,10 @@ panel.addEventListener('change', e => {
     await loadMedia();
   }, 'Photos importées.');
 });
-panel.addEventListener('input', e => { if (e.target.closest('#prodForm')) refreshProdHelpers(); });
+panel.addEventListener('input', e => {
+  if (e.target.name === 'price_mode') $('#prixBloc').dataset.mode = e.target.value;
+  if (e.target.closest('#prodForm')) refreshProdHelpers();
+});
 
 panel.addEventListener('click', e => {
   const t = e.target;

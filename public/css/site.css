@@ -368,3 +368,14 @@ table.nutri td { text-align: right; font-variant-numeric: tabular-nums lining-nu
 .choix-note label { font-size: 2.2rem; line-height: 1; color: #d9ccb0; cursor: pointer; padding: .1rem; transition: color .15s; }
 .choix-note label:hover, .choix-note label:hover ~ label, .choix-note input:checked ~ label { color: var(--or); }
 .choix-note input:focus-visible + label { outline: 2px solid var(--or); border-radius: 4px; }
+
+/* ================= Modes de prix (pièce / poids / les deux / sur devis) ================= */
+.carte__pro { color: var(--or-profond); font-weight: 500; }
+.tarifs-duo { display: grid; grid-template-columns: 1fr 1fr; gap: 0 1.5rem; }
+.tarifs-duo .tarif { margin: 1.5rem 0 .5rem; }
+.tarif__public { margin: 0; font: 600 .85rem var(--f-titre); letter-spacing: .06em; text-transform: uppercase; color: var(--or-profond); }
+.tarif--pro .tarif__seuil { color: var(--encre-douce); }
+.qte--kg input { width: 3.4rem; text-align: right; padding-right: .2rem; }
+.qte__unite { font-weight: 600; padding-right: .3rem; }
+.etiquette-pro { display: inline-block; font: 600 .68rem var(--f-titre); letter-spacing: .05em; text-transform: uppercase; background: var(--nuit); color: var(--or); padding: .15rem .5rem; border-radius: 999px; vertical-align: middle; margin-left: .3rem; }
+@media (max-width: 900px) { .tarifs-duo { grid-template-columns: 1fr; } .tarifs-duo .tarif + .tarif { margin-top: 0; } }

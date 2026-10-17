@@ -11,7 +11,14 @@
 /* ============================== Base de données : structure et contenu initial ============================== */
 
 
-const SCHEMA_VERSION = '3';
+const SCHEMA_VERSION = '4';
+
+// Colonnes ajoutées après la première version (ajoutées une à une, sans rien effacer)
+const ADD_COLUMNS = [
+  "ALTER TABLE products ADD COLUMN price_mode TEXT DEFAULT 'piece'",   // piece | kg | both | devis
+  'ALTER TABLE products ADD COLUMN price_kg_cents INTEGER',            // prix au kilo (professionnels)
+  'ALTER TABLE products ADD COLUMN min_kg REAL',                       // commande minimale au kilo
+];
 
 const SCHEMA = [
   "CREATE TABLE IF NOT EXISTS products ( id TEXT PRIMARY KEY, name TEXT NOT NULL, arabic_name TEXT, tagline TEXT, description TEXT, price_cents INTEGER NOT NULL, price_label TEXT DEFAULT 'la pièce', threshold INTEGER, ingredients TEXT, allergens TEXT, traces TEXT, energy_kcal REAL, proteins REAL, carbs REAL, fats REAL, salt REAL, image TEXT, gallery TEXT DEFAULT '[]', featured INTEGER DEFAULT 0, visible INTEGER DEFAULT 1, position INTEGER DEFAULT 0, updated_at TEXT DEFAULT (datetime('now')) )",
@@ -283,15 +290,16 @@ const MAX_MEDIA_BYTES = 1_800_000; // limite D1 : ~2 Mo par ligne
 const PRODUCT_FIELDS = [
   'name', 'arabic_name', 'tagline', 'description', 'price_cents', 'price_label', 'threshold',
   'ingredients', 'allergens', 'traces', 'energy_kcal', 'proteins', 'carbs', 'fats', 'salt',
-  'image', 'gallery', 'featured', 'visible', 'position',
+  'image', 'gallery', 'featured', 'visible', 'position', 'price_mode', 'price_kg_cents', 'min_kg',
 ];
+const PRICE_MODES = ['piece', 'kg', 'both', 'devis'];
 const VIDEO_FIELDS = ['title', 'description', 'url', 'poster', 'product_id', 'visible', 'position'];
 const PUBLIC_SETTINGS = [
   'hero_title', 'hero_text', 'quote_note', 'story_title', 'story_body', 'story_image',
   'contact_phone', 'contact_whatsapp', 'contact_email', 'contact_instagram', 'contact_facebook',
   'contact_tiktok', 'contact_zone', 'contact_hours', 'music_url', 'legal_text',
 ];
-const APP_VERSION = '2.4';
+const APP_VERSION = '2.5';
 const GALLERY_FIELDS = ['image', 'title', 'event_type', 'caption', 'visible', 'position'];
 const REVIEW_STATUSES = ['en attente', 'publié', 'refusé'];
 const TRACK_PAGES = ['accueil', 'collection', 'p', 'histoire', 'evenements', 'avis', 'videos', 'contact', 'devis', 'mentions'];
@@ -330,6 +338,7 @@ async function initDb(env) {
   const current = await db.prepare("SELECT value FROM settings WHERE key = 'schema_version'").first().catch(() => null);
   if (current?.value === SCHEMA_VERSION) return;
   await db.batch(SCHEMA.map(sql => db.prepare(sql)));
+  for (const sql of ADD_COLUMNS) await db.prepare(sql).run().catch(() => {}); // déjà présente : ignoré
   await db.batch(SEED.map(({ sql, params }) => db.prepare(sql).bind(...params)));
   await db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('schema_version', ?)").bind(SCHEMA_VERSION).run();
 }
@@ -605,14 +614,27 @@ async function createRequest(request, env, url, ctx) {
   const checked = [];
   if (items.length) {
     const ids = items.map(i => String(i.id));
-    const rows = await env.DB.prepare(`SELECT id, name, price_cents, price_label FROM products WHERE id IN (${ids.map(() => '?').join(',')})`).bind(...ids).all();
+    const rows = await env.DB.prepare(`SELECT id, name, price_cents, price_label, price_mode, price_kg_cents FROM products WHERE id IN (${ids.map(() => '?').join(',')})`).bind(...ids).all();
     const byId = Object.fromEntries(rows.results.map(r => [r.id, r]));
     for (const it of items) {
       const prod = byId[it.id];
-      const qty = Math.max(0, Math.min(5000, toInt(it.qty) || 0));
-      if (!prod || !qty) continue;
-      checked.push({ id: prod.id, name: prod.name, qty, unit_cents: prod.price_cents, label: prod.price_label });
-      estimate += qty * prod.price_cents;
+      if (!prod) continue;
+      const mode = prod.price_mode || 'piece';
+      if (it.unit === 'kg') {
+        // Achat au poids (professionnels) : jamais de dégressivité
+        if (!['kg', 'both'].includes(mode) || !prod.price_kg_cents) continue;
+        const qty = Math.round(Math.max(0, Math.min(500, toNum(it.qty) || 0)) * 10) / 10;
+        if (!qty) continue;
+        checked.push({ id: prod.id, name: prod.name, qty, unit: 'kg', unit_cents: prod.price_kg_cents, label: 'le kg' });
+        estimate += Math.round(qty * prod.price_kg_cents);
+      } else {
+        if (mode === 'kg') continue;
+        const qty = Math.max(0, Math.min(5000, toInt(it.qty) || 0));
+        if (!qty) continue;
+        const surDevis = mode === 'devis';
+        checked.push({ id: prod.id, name: prod.name, qty, unit: 'piece', unit_cents: surDevis ? 0 : prod.price_cents, label: surDevis ? 'sur devis' : prod.price_label });
+        if (!surDevis) estimate += qty * prod.price_cents;
+      }
     }
   }
 
@@ -708,7 +730,8 @@ async function notify(env, r, origin) {
   const channels = alertChannels(env);
   const label = r.kind === 'avis' ? 'Nouvel avis client à valider' : r.kind === 'contact' ? 'Nouveau message' : 'Nouvelle demande de devis';
   const fmt = c => (c / 100).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
-  const lines = r.items.map(i => `${i.qty} × ${i.name} (${fmt(i.unit_cents)} ${i.label || ''})`);
+  const qtyTxt = i => i.unit === 'kg' ? `${String(i.qty).replace('.', ',')} kg de` : `${i.qty} ×`;
+  const lines = r.items.map(i => `${qtyTxt(i)} ${i.name} (${i.unit_cents ? fmt(i.unit_cents) + ' ' : ''}${i.label || ''})`);
   const details = [
     r.rating && `Note : ${'★'.repeat(r.rating)}${'☆'.repeat(5 - r.rating)}`,
     r.phone && `Téléphone : ${r.phone}`, r.email && `E-mail : ${r.email}`,
@@ -723,7 +746,7 @@ async function notify(env, r, origin) {
       <div style="border:1px solid #dcc08f;border-top:0;padding:22px;background:#fbf8f1">
         <h2 style="margin:0 0 12px;font-size:20px">${e(label)} — ${e(r.name)}</h2>
         <p style="margin:0 0 14px;line-height:1.6">${details.map(e).join('<br>')}</p>
-        ${lines.length ? `<table style="width:100%;border-collapse:collapse;margin:0 0 10px">${r.items.map(i => `<tr><td style="padding:6px 0;border-bottom:1px solid #e8dcc2">${i.qty} × ${e(i.name)}</td><td style="padding:6px 0;border-bottom:1px solid #e8dcc2;text-align:right">${fmt(i.qty * i.unit_cents)}</td></tr>`).join('')}</table>
+        ${lines.length ? `<table style="width:100%;border-collapse:collapse;margin:0 0 10px">${r.items.map(i => `<tr><td style="padding:6px 0;border-bottom:1px solid #e8dcc2">${e(qtyTxt(i))} ${e(i.name)}</td><td style="padding:6px 0;border-bottom:1px solid #e8dcc2;text-align:right">${i.unit_cents ? fmt(Math.round(i.qty * i.unit_cents)) : 'sur devis'}</td></tr>`).join('')}</table>
         <p style="margin:0 0 14px;text-align:right"><strong>Estimation : ${fmt(r.estimate_cents)}</strong></p>` : ''}
         ${r.message ? `<p style="white-space:pre-wrap;background:#fff;border:1px solid #e8dcc2;padding:12px;border-radius:8px">${e(r.message)}</p>` : ''}
         <p style="margin:20px 0 0"><a href="${origin}/admin/" style="background:#050505;color:#d6b55d;padding:10px 18px;border-radius:999px;text-decoration:none">Ouvrir l’espace administrateur</a></p>
@@ -824,7 +847,9 @@ function pick(obj, fields) {
 }
 function normalizeProduct(data) {
   if (data.gallery && typeof data.gallery !== 'string') data.gallery = JSON.stringify(data.gallery);
-  for (const k of ['price_cents', 'threshold', 'featured', 'visible', 'position']) if (k in data) data[k] = data[k] == null ? null : toInt(data[k]);
+  for (const k of ['price_cents', 'price_kg_cents', 'threshold', 'featured', 'visible', 'position']) if (k in data) data[k] = data[k] == null ? null : toInt(data[k]);
+  if ('min_kg' in data) data.min_kg = data.min_kg == null ? null : toNum(data.min_kg);
+  if ('price_mode' in data && !PRICE_MODES.includes(data.price_mode)) data.price_mode = 'piece';
   for (const k of ['energy_kcal', 'proteins', 'carbs', 'fats', 'salt']) if (k in data) data[k] = data[k] == null ? null : toNum(data[k]);
   for (const k of ['featured', 'visible', 'position']) if (k in data && data[k] == null) data[k] = 0;
   return data;

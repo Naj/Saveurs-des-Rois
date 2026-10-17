@@ -148,3 +148,21 @@ button.adm-alerte { border: 0; font: inherit; font-size: .95rem; cursor: pointer
 .adm-etapes code, .adm .message code { background: #f3ead6; padding: .05em .35em; border-radius: 4px; font-size: .92em; }
 .adm-dot { width: .55rem; height: .55rem; border-radius: 50%; background: var(--err); display: inline-block; }
 .adm-dot[hidden] { display: none; }
+
+/* ================= Modes de prix ================= */
+.adm-sous { margin: .2rem 0 .6rem; font: 600 .82rem var(--f-titre); letter-spacing: .05em; text-transform: uppercase; color: var(--or-profond); }
+.adm-sous small { text-transform: none; letter-spacing: 0; font: italic 400 .9rem var(--f-texte); color: var(--encre-douce); }
+.adm-modes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .6rem; margin-bottom: 1.2rem; }
+.adm-mode { display: flex; gap: .5rem; align-items: flex-start; border: 1px solid #cdbb94; border-radius: 12px; padding: .65rem .75rem; cursor: pointer; background: var(--ivoire); }
+.adm-mode input { margin-top: .3rem; accent-color: var(--or-profond); }
+.adm-mode span { display: grid; gap: .1rem; }
+.adm-mode strong { font-size: 1rem; }
+.adm-mode small { font-size: .85rem; color: var(--encre-douce); line-height: 1.3; }
+.adm-mode:has(input:checked) { border-color: var(--or-profond); box-shadow: 0 0 0 2px var(--or); background: #fff; }
+#prixBloc .si-piece, #prixBloc .si-kg { display: none; }
+#prixBloc[data-mode="piece"] .si-piece, #prixBloc[data-mode="both"] .si-piece,
+#prixBloc[data-mode="kg"] .si-kg, #prixBloc[data-mode="both"] .si-kg { display: block; }
+#prixBloc[data-mode="both"] .si-kg { border-top: 1px dashed var(--amande); padding-top: .8rem; }
+.adm-pro { font-size: .75rem; background: var(--nuit); color: var(--or); padding: .05rem .4rem; border-radius: 999px; }
+@media (max-width: 860px) { .adm-modes { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 420px) { .adm-modes { grid-template-columns: 1fr; } }
