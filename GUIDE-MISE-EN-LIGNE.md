@@ -181,6 +181,21 @@ Admin → **Statistiques** : visites, pages vues, pâtisseries les plus consult�
 
 ---
 
+## Choisir l'affichage du prix (pièce, kilo, sur devis)
+
+Admin → **Produits** → la recette → section **2. Prix** → *Affichage du prix sur le site* :
+
+| Choix | Ce que voit le client |
+|---|---|
+| **À la pièce** | Prix unitaire + « Prix dégressif à partir de N pièces » (seuil vide = pas de dégressivité) |
+| **Au kilo** | Prix au kg pour les professionnels, vente au poids (par 500 g), **jamais de dégressivité**, minimum de commande facultatif |
+| **Les deux** | Deux blocs sur la fiche : *Particuliers · à la pièce* et *Professionnels · au poids* |
+| **Sur devis** | Aucun prix affiché : « Prix sur devis » ; le client indique un nombre de pièces |
+
+Dans les demandes de devis, les lignes au poids sont marquées **PRO** et calculées au kilo.
+
+---
+
 ## Au quotidien
 
 | Je veux… | Où |
