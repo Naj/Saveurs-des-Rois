@@ -743,6 +743,50 @@ async function init() {
   naviguer();
 }
 window.addEventListener('hashchange', naviguer);
+
+/* ---------------- Application installable (PWA) */
+let invite = null; // évènement d'installation proposé par Chrome / Edge / Android
+const estInstallee = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const estIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+if ('serviceWorker' in navigator && !IS_FILE) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+}
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault(); invite = e;
+  document.querySelectorAll('[data-installer]').forEach(b => { b.hidden = false; });
+});
+window.addEventListener('appinstalled', () => {
+  invite = null;
+  document.querySelectorAll('[data-installer]').forEach(b => { b.hidden = true; });
+  toast('Saveurs des Rois est installée ✓');
+});
+function etapesInstallation() {
+  const ua = navigator.userAgent;
+  if (estInstallee()) return '<p class="installer__ok">✓ L’application est déjà installée sur cet appareil.</p>';
+  if (invite) return '<p>Cliquez sur <strong>Installer</strong> : l’icône Saveurs des Rois apparaîtra avec vos applications.</p>';
+  if (estIOS()) return `<ol><li>Touchez le bouton <strong>Partager</strong> <span aria-hidden="true">⬆︎</span> en bas de Safari (en haut sur iPad).</li><li>Choisissez <strong>Sur l’écran d’accueil</strong>.</li><li>Touchez <strong>Ajouter</strong>.</li></ol>${/CriOS|FxiOS|EdgiOS/.test(ua) ? '<p class="note">Sur iPhone, l’installation se fait depuis <strong>Safari</strong>.</p>' : ''}`;
+  if (/Android/i.test(ua)) return '<ol><li>Ouvrez le menu <strong>⋮</strong> du navigateur.</li><li>Choisissez <strong>Installer l’application</strong> ou <strong>Ajouter à l’écran d’accueil</strong>.</li></ol>';
+  if (/Firefox/i.test(ua)) return '<p>Firefox ne propose pas l’installation sur ordinateur. Ouvrez le site dans <strong>Chrome</strong> ou <strong>Edge</strong>, puis cliquez sur l’icône d’installation à droite de la barre d’adresse.</p>';
+  if (/Safari/i.test(ua) && !/Chrome|Edg/i.test(ua)) return '<ol><li>Menu <strong>Fichier</strong> (ou bouton Partager).</li><li>Choisissez <strong>Ajouter au Dock</strong>.</li></ol>';
+  return '<ol><li>Cliquez sur l’icône d’installation <span aria-hidden="true">⊕</span> à droite de la barre d’adresse,</li><li>ou ouvrez le menu <strong>⋮</strong> → <strong>Installer Saveurs des Rois</strong>.</li></ol>';
+}
+function ouvrirInstallation() {
+  const d = document.getElementById('installerDialog');
+  document.getElementById('installerEtapes').innerHTML = etapesInstallation();
+  d.querySelector('[data-installer-go]').hidden = !invite || estInstallee();
+  d.showModal();
+}
+document.addEventListener('click', async e => {
+  if (e.target.closest('[data-installer], [data-installer-info]')) {
+    if (invite && e.target.closest('[data-installer]')) { invite.prompt(); invite = null; return; }
+    ouvrirInstallation(); return;
+  }
+  if (e.target.closest('[data-installer-go]') && invite) {
+    document.getElementById('installerDialog').close();
+    invite.prompt(); invite = null;
+  }
+});
+if (estInstallee()) document.documentElement.classList.add('appli');
 document.addEventListener('keydown', e => {
   const d = document.getElementById('visionneuse');
   if (d?.open && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) ouvrirVisionneuse(visIndex + (e.key === 'ArrowRight' ? 1 : -1));

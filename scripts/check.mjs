@@ -7,11 +7,11 @@ const fail = msg => { console.error('✖ ' + msg); errors++; };
 const ok = msg => console.log('✔ ' + msg);
 const forWorkers = process.argv.includes('--workers');
 
-for (const f of ['public/_worker.js', 'public/js/app.js', 'public/js/catalogue-data.js', 'public/admin/admin.js']) {
+for (const f of ['public/_worker.js', 'public/js/app.js', 'public/js/catalogue-data.js', 'public/admin/admin.js', 'public/admin/devis.js', 'public/sw.js']) {
   try { execFileSync(process.execPath, ['--input-type=module', '--check'], { input: readFileSync(f), stdio: 'pipe' }); ok(`syntaxe ${f}`); }
   catch (e) { fail(`erreur de syntaxe dans ${f}\n${e.stderr}`); }
 }
-for (const f of ['public/index.html', 'public/404.html', 'public/admin/index.html', 'public/_routes.json']) {
+for (const f of ['public/index.html', 'public/404.html', 'public/admin/index.html', 'public/_routes.json', 'public/manifest.webmanifest', 'public/assets/img/icon-512.png']) {
   existsSync(f) ? ok(`présent ${f}`) : fail(`fichier manquant : ${f}`);
 }
 if (forWorkers) {

@@ -392,3 +392,21 @@ table.nutri td { text-align: right; font-variant-numeric: tabular-nums lining-nu
 .tarif__calc { margin: 0; font-size: 1.02rem; }
 .tarif__calc span, .palier-suivant { color: var(--ok); font-size: .95rem; }
 .ligne s { color: var(--encre-douce); }
+
+/* ================= Application installable ================= */
+.nav__installer { background: none; border: 1px dashed rgba(214,181,93,.6); color: var(--or-clair); border-radius: 999px; padding: .3rem .8rem; font: inherit; font-size: .95rem; cursor: pointer; }
+.nav__installer:hover { border-style: solid; }
+.nav__installer[hidden], .appli .foot__installer { display: none; }
+.foot__installer { background: none; border: 0; padding: .2rem 0; color: #d9cfbb; font: inherit; cursor: pointer; text-align: left; }
+.foot__installer:hover { color: var(--or-clair); }
+.installer { border: 1px solid var(--or); border-radius: 22px; max-width: min(28rem, calc(100% - 2rem)); padding: 1.6rem 1.6rem 1.3rem; background: var(--ivoire); color: var(--encre); text-align: center; }
+.installer::backdrop { background: rgba(5,5,5,.7); }
+.installer img { margin: 0 auto .8rem; border-radius: 18px; }
+.installer h2 { font-size: 1.35rem; }
+.installer ol { text-align: left; padding-left: 1.3rem; display: grid; gap: .4rem; }
+.installer__ok { color: var(--ok); font-weight: 600; }
+.installer__actions { display: flex; gap: .6rem; justify-content: center; flex-wrap: wrap; margin-top: 1rem; }
+/* Ouverte comme application : marge pour l'encoche du téléphone */
+.appli .top { padding-top: max(var(--pad-t), 0px); }
+@media (max-width: 860px) { .nav__installer { margin-top: .8rem; padding: .7rem; } }
+.installer [hidden], .btn[hidden] { display: none; }

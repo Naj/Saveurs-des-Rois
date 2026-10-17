@@ -214,6 +214,31 @@ Sur le site : tableau des tarifs sur la fiche (le palier atteint est surligné),
 
 ---
 
+## Vos données lors des mises à jour — et la sauvegarde
+
+**Une mise à jour du site n'efface jamais vos fiches.** Produits, prix, grilles, textes, photos importées, galerie, avis et demandes sont dans la base de données Cloudflare (D1), séparée des fichiers. Quand vous remplacez les fichiers sur GitHub, la base n'est pas touchée : la mise à jour ajoute seulement les nouveautés.
+
+**Sécurité supplémentaire : la sauvegarde.** Admin → onglet **Sauvegarde** :
+- **Sauvegarder** télécharge un fichier `sauvegarde-saveurs-des-rois-AAAA-MM-JJ.json` (fiches, textes, réglages, avis, galerie, demandes et devis) ; la variante **avec les photos importées** inclut aussi les photos ;
+- **Restaurer** : cochez ce que vous voulez remettre, choisissez le fichier ; un résumé s'affiche avant de confirmer.
+- Un rappel apparaît dans l'onglet Demandes si aucune sauvegarde n'a été faite depuis plus d'un mois.
+
+Conseil : sauvegardez une fois par mois et avant chaque grosse modification, et rangez le fichier sur Google Drive ou une clé USB.
+
+---
+
+## Installer le site comme une application (PWA)
+
+Les visiteurs peuvent installer Saveurs des Rois sur leur téléphone ou leur ordinateur : icône dorée sur l'écran d'accueil ou le bureau, ouverture en plein écran sans barre de navigateur, raccourcis « La collection » et « Mon devis », et consultation de la collection même sans connexion.
+
+- **Ordinateur (Chrome, Edge)** et **Android** : un bouton **Installer l'appli** apparaît dans le menu du site.
+- **iPhone / iPad** : lien **📲 Installer l'application** en bas de page, qui explique la marche à suivre dans Safari (Partager → Sur l'écran d'accueil).
+- Les visites depuis l'application apparaissent dans **Statistiques** avec la source `appli`.
+
+Rien à configurer : c'est actif dès la mise en ligne (le site doit être en `https`, ce qui est le cas sur Cloudflare).
+
+---
+
 ## Au quotidien
 
 | Je veux… | Où |

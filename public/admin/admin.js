@@ -56,7 +56,7 @@ document.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click',
 }));
 
 function render() {
-  const fn = { alertes: tAlertes, demandes: tDemandes, produits: tProduits, galerie: tGalerie, avis: tAvis, stats: tStats, textes: tTextes, videos: tVideos, medias: tMedias }[st.tab];
+  const fn = { sauvegarde: tSauvegarde, alertes: tAlertes, demandes: tDemandes, produits: tProduits, galerie: tGalerie, avis: tAvis, stats: tStats, textes: tTextes, videos: tVideos, medias: tMedias }[st.tab];
   $('#panel').innerHTML = fn();
   if (st.tab === 'medias') loadMedia();
   if (st.tab === 'stats') loadStats().catch(e => { $('#statsZone').innerHTML = `<p class="message message--err">${esc(e.message)}</p>`; });
@@ -72,7 +72,7 @@ function demandeAvisLien(r) {
   return [tel && `<a href="https://wa.me/${tel}?text=${encodeURIComponent(texte)}" target="_blank" rel="noopener">Demander un avis (WhatsApp)</a>`,
     r.email && `<a href="mailto:${esc(r.email)}?subject=${encodeURIComponent('Votre avis compte pour nous')}&body=${encodeURIComponent(texte)}">Demander un avis (e-mail)</a>`].filter(Boolean).join('');
 }
-const ADMIN_VERSION = '2.8';
+const ADMIN_VERSION = '2.9';
 function alertBanner() {
   if (!st.version) return `<button class="adm-alerte adm-alerte--warn" data-goto="alertes">⚠️ Serveur du site pas à jour — voir l’onglet Alertes</button>`;
   const a = st.alerts || {};
@@ -80,6 +80,43 @@ function alertBanner() {
   return on.length
     ? `<button class="adm-alerte adm-alerte--on" data-goto="alertes">🔔 Alertes actives : ${on.join(' + ')}</button>`
     : `<button class="adm-alerte" data-goto="alertes">🔕 Alertes de devis désactivées — les activer</button>`;
+}
+
+/* ---------------- Sauvegarde */
+const LAST_BACKUP = 'sdr_derniere_sauvegarde';
+function derniereSauvegarde() { try { return localStorage.getItem(LAST_BACKUP); } catch { return null; } }
+function tSauvegarde() {
+  const d = derniereSauvegarde();
+  return `<h1>Sauvegarde de vos données</h1>
+  <div class="adm-item adm-rassure">
+    <h2 style="font-size:1.1rem;margin-top:0">Vos fiches ne sont jamais effacées par une mise à jour</h2>
+    <p>Produits, prix, grilles, textes, photos importées, avis, galerie et demandes sont stockés dans la base de données Cloudflare, <strong>pas dans les fichiers du site</strong>. Remplacer les fichiers sur GitHub ne les touche pas : la mise à jour ajoute seulement les nouveautés, sans rien écraser.</p>
+    <p style="margin-bottom:0">La sauvegarde ci-dessous est une sécurité en plus : une copie complète sur votre ordinateur, à refaire de temps en temps (par exemple une fois par mois et avant chaque grosse modification).</p>
+  </div>
+  <section class="adm-item">
+    <h2 style="font-size:1.1rem;margin-top:0">1. Télécharger une sauvegarde</h2>
+    <p class="note">${d ? `Dernière sauvegarde depuis cet appareil : <strong>${new Date(d).toLocaleDateString('fr-FR', { dateStyle: 'long' })}</strong>.` : 'Aucune sauvegarde faite depuis cet appareil.'}</p>
+    <div class="adm-actions">
+      <a class="btn btn--or" href="/api/admin/backup" data-backup>Sauvegarder (fiches, textes, avis, devis)</a>
+      <a class="btn btn--ligne" href="/api/admin/backup?media=1" data-backup>Sauvegarder avec les photos importées</a>
+    </div>
+    <p class="note">Un fichier <code>sauvegarde-saveurs-des-rois-AAAA-MM-JJ.json</code> est enregistré dans vos Téléchargements. Rangez-le dans un endroit sûr (Google Drive, clé USB…).</p>
+  </section>
+  <section class="adm-item">
+    <h2 style="font-size:1.1rem;margin-top:0">2. Restaurer une sauvegarde</h2>
+    <p class="note">Remet les éléments du fichier dans la base. Les éléments existants portant le même identifiant sont remplacés ; ce qui n’est pas dans le fichier est conservé.</p>
+    <div class="adm-restore">
+      ${[['products', 'Produits (fiches, prix, grilles)', true], ['settings', 'Textes, contact, réglages devis', true], ['gallery', 'Galerie', true], ['reviews', 'Avis', true], ['videos', 'Vidéos', true], ['requests', 'Demandes et devis', true], ['media', 'Photos importées', true]]
+        .map(([k, l, c]) => `<label class="adm-check"><input type="checkbox" name="only" value="${k}" ${c ? 'checked' : ''}> ${l}</label>`).join('')}
+    </div>
+    <label class="btn btn--sombre adm-upload">Choisir le fichier de sauvegarde…<input type="file" accept=".json,application/json" id="restoreFile" hidden></label>
+    <p id="restoreMsg" class="note"></p>
+  </section>`;
+}
+function rappelSauvegarde() {
+  const d = derniereSauvegarde();
+  const vieux = !d || Date.now() - new Date(d) > 30 * 86400000;
+  return vieux ? `<button class="adm-alerte adm-alerte--warn" data-goto="sauvegarde">💾 ${d ? 'Dernière sauvegarde il y a plus d’un mois' : 'Pensez à sauvegarder vos fiches'}</button>` : '';
 }
 
 /* ---------------- Alertes de devis */
@@ -116,7 +153,7 @@ function tDemandes() {
   return `
   <div class="adm-bar">
     <h1 style="margin:0">Demandes de devis et messages</h1>
-    ${alertBanner()}
+    ${alertBanner()}${rappelSauvegarde()}
     <select id="filter" aria-label="Filtrer">
       ${['actives', 'toutes', ...STATUSES].map(s => `<option ${s === st.filter ? 'selected' : ''}>${s}</option>`).join('')}
     </select>
@@ -634,6 +671,25 @@ panel.addEventListener('change', e => {
     await api(`/api/admin/requests/${id}`, { method: 'PUT', body: { status: e.target.value } });
     st.requests.find(r => r.id === id).status = e.target.value; countNew(); render();
   }, 'Statut mis à jour.');
+  if (e.target.id === 'restoreFile') {
+    const f = e.target.files[0]; if (!f) return;
+    const only = [...panel.querySelectorAll('[name=only]:checked')].map(x => x.value);
+    const msg = $('#restoreMsg');
+    run(async () => {
+      let data;
+      try { data = JSON.parse(await f.text()); } catch { throw new Error('Ce fichier n’est pas lisible.'); }
+      if (data?.format !== 'saveurs-des-rois-backup') throw new Error('Ce fichier n’est pas une sauvegarde Saveurs des Rois.');
+      const n = Object.fromEntries(Object.entries(data.tables).map(([k, v]) => [k, (v || []).length]));
+      const resume = `Sauvegarde du ${new Date(data.created_at).toLocaleString('fr-FR')} : ${n.products || 0} produits, ${n.reviews || 0} avis, ${n.gallery || 0} photos de galerie, ${n.requests || 0} demandes, ${n.media || 0} photos importées.`;
+      if (!confirm(`${resume}\n\nRestaurer les éléments cochés ? Les fiches actuelles du même nom seront remplacées par celles de la sauvegarde.`)) { e.target.value = ''; return; }
+      msg.textContent = 'Restauration en cours…';
+      const r = await api('/api/admin/restore', { method: 'POST', body: { ...data, only } });
+      e.target.value = '';
+      msg.textContent = 'Restauration terminée : ' + Object.entries(r.counts).map(([k, v]) => `${v} ${k}`).join(', ') + '.';
+      const o = await api('/api/admin/overview'); Object.assign(st, o);
+      st.requests = (await api('/api/admin/requests')).requests; st.reviews = (await api('/api/admin/reviews')).reviews; countNew();
+    }, 'Sauvegarde restaurée.');
+  }
   if (e.target.id === 'mediaUpload') run(async () => {
     for (const f of e.target.files) await upload(f);
     await loadMedia();
@@ -680,6 +736,7 @@ panel.addEventListener('click', e => {
     await api(`/api/admin/gallery/${t.dataset.delgalerie}`, { method: 'DELETE' });
     st.gallery = st.gallery.filter(g => g.id !== +t.dataset.delgalerie); render();
   }, 'Photo retirée.');
+  if (t.closest('[data-backup]')) { try { localStorage.setItem(LAST_BACKUP, new Date().toISOString()); } catch { } setTimeout(render, 1500); }
   const go = t.closest('[data-goto]');
   if (go) { document.querySelector(`[data-tab="${go.dataset.goto}"]`).click(); return; }
   if (t.id === 'testAlert') return run(async () => { const r = await api('/api/admin/test-alert', { method: 'POST' }); toast(`Alerte de test envoyée (${r.sent.join(' + ')}).`); });

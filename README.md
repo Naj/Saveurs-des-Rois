@@ -49,6 +49,7 @@ GitHub (code)  ──commit──▶  Cloudflare Pages (ou Workers) ──▶  S
 | Textes & contact | Accueil, votre histoire, coordonnées, réseaux sociaux, mentions légales, musique d'ambiance |
 | Vidéos | Lien YouTube / Vimeo / .mp4, associable à un produit |
 | Photos | Import de photos (compressées automatiquement) |
+| Sauvegarde | Télécharger toutes vos données dans un fichier, et les restaurer |
 
 ## Bon à savoir
 
@@ -56,4 +57,6 @@ GitHub (code)  ──commit──▶  Cloudflare Pages (ou Workers) ──▶  S
 - **Photos importées dans l'admin** : stockées dans D1 (1,8 Mo max après compression). Pour un grand volume, prévoir Cloudflare R2.
 - **Musique d'ambiance** : désactivée par défaut, jamais lancée automatiquement. Uniquement une musique libre de droits ou sous licence.
 - **Alertes de devis** : e-mail (Resend) et/ou WhatsApp (CallMeBot), activées par des secrets Cloudflare — voir le guide.
+- **Application installable (PWA)** : icône sur ordinateur et téléphone, consultation hors connexion (`manifest.webmanifest`, `sw.js`).
+- **Mises à jour** : vos fiches sont dans la base D1, jamais dans les fichiers ; une mise à jour ne les efface pas. Sauvegarde téléchargeable dans l'admin.
 - **Mot de passe** : jamais dans le code. Il est stocké chez Cloudflare (secret `ADMIN_PASSWORD`).

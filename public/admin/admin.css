@@ -174,3 +174,9 @@ button.adm-alerte { border: 0; font: inherit; font-size: .95rem; cursor: pointer
 .adm-grille td { padding: .25rem .6rem .25rem 0; white-space: nowrap; }
 .adm-grille input { font: inherit; width: 5.5rem; padding: .45rem .6rem; border: 1px solid #cdbb94; border-radius: 8px; background: var(--ivoire); text-align: right; }
 .adm-remise { color: var(--ok); font-weight: 600; min-width: 4rem; }
+
+/* ================= Sauvegarde ================= */
+.adm-rassure { border-left: 5px solid var(--ok); }
+.adm-restore { display: flex; flex-wrap: wrap; gap: 0 .5rem; margin: .4rem 0 .8rem; }
+.adm-bar .adm-alerte + .adm-alerte { margin-left: .4rem; }
+.adm-item + .adm-item { margin-top: .9rem; }

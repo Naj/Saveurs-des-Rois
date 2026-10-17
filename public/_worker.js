@@ -304,7 +304,19 @@ const PUBLIC_SETTINGS = [
   'contact_phone', 'contact_whatsapp', 'contact_email', 'contact_instagram', 'contact_facebook',
   'contact_tiktok', 'contact_zone', 'contact_hours', 'music_url', 'legal_text',
 ];
-const APP_VERSION = '2.8';
+const APP_VERSION = '2.9';
+// Colonnes restaurées depuis une sauvegarde (les colonnes inconnues sont ignorées)
+const RESTORE_COLUMNS = {
+  products: ['id', 'name', 'arabic_name', 'tagline', 'description', 'price_cents', 'price_label', 'threshold', 'ingredients', 'allergens', 'traces',
+    'energy_kcal', 'proteins', 'carbs', 'fats', 'salt', 'image', 'gallery', 'featured', 'visible', 'position', 'updated_at',
+    'price_mode', 'price_kg_cents', 'min_kg', 'tiers'],
+  settings: ['key', 'value'],
+  videos: ['id', 'title', 'description', 'url', 'poster', 'product_id', 'visible', 'position', 'created_at'],
+  gallery: ['id', 'image', 'title', 'event_type', 'caption', 'visible', 'position', 'created_at'],
+  reviews: ['id', 'name', 'event_type', 'rating', 'text', 'reply', 'source', 'status', 'event_date', 'created_at'],
+  requests: ['id', 'kind', 'name', 'email', 'phone', 'event_date', 'event_type', 'delivery', 'message', 'items', 'estimate_cents', 'status', 'created_at', 'quote'],
+  media: ['id', 'name', 'mime', 'size', 'data', 'created_at'],
+};
 const GALLERY_FIELDS = ['image', 'title', 'event_type', 'caption', 'visible', 'position'];
 const REVIEW_STATUSES = ['en attente', 'publié', 'refusé'];
 const TRACK_PAGES = ['accueil', 'collection', 'p', 'histoire', 'evenements', 'avis', 'videos', 'contact', 'devis', 'mentions'];
@@ -592,6 +604,54 @@ async function adminApi(request, env, p, m) {
   }
 
   // Statistiques (mesure d'audience anonyme)
+  // Sauvegarde complète (fichier JSON téléchargé) et restauration
+  if (p === '/api/admin/backup' && m === 'GET') {
+    const withMedia = new URL(request.url).searchParams.get('media') === '1';
+    const q = sql => db.prepare(sql);
+    const res = await db.batch([q('SELECT * FROM products ORDER BY position'), q('SELECT * FROM settings'), q('SELECT * FROM videos'),
+      q('SELECT * FROM gallery'), q('SELECT * FROM reviews'), q('SELECT * FROM requests'),
+      withMedia ? q('SELECT id, name, mime, size, data, created_at FROM media') : q('SELECT id FROM media WHERE 0')]);
+    const [products, settings, videos, gallery, reviews, requests, media] = res.map(r => r.results);
+    const b64 = buf => { const u = new Uint8Array(buf); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode(...u.subarray(i, i + 0x8000)); return btoa(s); };
+    const body = {
+      format: 'saveurs-des-rois-backup', version: 1, app: APP_VERSION, created_at: new Date().toISOString(),
+      tables: { products, settings: settings.filter(x => x.key !== 'schema_version'), videos, gallery, reviews, requests,
+        media: media.map(x => ({ ...x, data: b64(x.data) })) },
+    };
+    const day = parisDay(Date.now());
+    return new Response(JSON.stringify(body), { headers: {
+      'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store',
+      'Content-Disposition': `attachment; filename="sauvegarde-saveurs-des-rois-${day}${withMedia ? '-avec-photos' : ''}.json"`,
+    } });
+  }
+  if (p === '/api/admin/restore' && m === 'POST') {
+    let b;
+    try { b = await request.json(); } catch { return json({ error: 'Fichier illisible : choisissez une sauvegarde .json du site.' }, 400); }
+    if (b?.format !== 'saveurs-des-rois-backup' || !b.tables) return json({ error: 'Ce fichier n’est pas une sauvegarde Saveurs des Rois.' }, 400);
+    const only = Array.isArray(b.only) && b.only.length ? b.only : Object.keys(RESTORE_COLUMNS);
+    const counts = {};
+    for (const [table, cols] of Object.entries(RESTORE_COLUMNS)) {
+      if (!only.includes(table)) continue;
+      const rows = Array.isArray(b.tables[table]) ? b.tables[table] : [];
+      const stmts = [];
+      for (const row of rows) {
+        if (!row || typeof row !== 'object') continue;
+        const vals = cols.map(c => {
+          let v = row[c] ?? null;
+          if (table === 'media' && c === 'data') v = v ? Uint8Array.from(atob(v), ch => ch.charCodeAt(0)) : null;
+          else if (v !== null && typeof v === 'object') v = JSON.stringify(v);
+          return v;
+        });
+        if (table === 'settings' && row.key === 'schema_version') continue;
+        if (table === 'media' && !vals[cols.indexOf('data')]) continue;
+        stmts.push(db.prepare(`INSERT OR REPLACE INTO ${table} (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`).bind(...vals));
+      }
+      for (let i = 0; i < stmts.length; i += 50) await db.batch(stmts.slice(i, i + 50));
+      counts[table] = stmts.length;
+    }
+    return json({ ok: true, counts });
+  }
+
   if (p === '/api/admin/stats' && m === 'GET') {
     const days = Math.min(365, Math.max(1, toInt(new URL(request.url).searchParams.get('days')) || 30));
     const since = parisDay(Date.now() - (days - 1) * 86400_000);

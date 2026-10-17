@@ -8,6 +8,12 @@
   <meta name="theme-color" content="#050505">
   <link rel="icon" type="image/png" href="assets/img/favicon.png">
   <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Saveurs des Rois">
+  <meta name="application-name" content="Saveurs des Rois">
   <meta property="og:type" content="website">
   <meta property="og:title" content="Saveurs des Rois — Pâtisseries orientales artisanales">
   <meta property="og:description" content="Pâtisseries orientales faites maison, avec passion et authenticité. Devis gratuit.">
@@ -15,7 +21,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Cinzel:wght@500;600;700&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/site.css?v=2.8">
+  <link rel="stylesheet" href="css/site.css?v=2.9">
   <script type="application/ld+json">
   {"@context":"https://schema.org","@type":"Bakery","name":"Saveurs des Rois","description":"Pâtisseries orientales artisanales faites maison","image":"/assets/img/og-image.jpg","servesCuisine":"Pâtisserie orientale","priceRange":"€€"}
   </script>
@@ -36,6 +42,7 @@
         <a href="#/evenements" data-nav="evenements">Vos événements</a>
         <a href="#/videos" data-nav="videos">En vidéo</a>
         <a href="#/contact" data-nav="contact">Contact</a>
+        <button type="button" class="nav__installer" data-installer hidden>Installer l’appli</button>
         <a href="#/devis" class="nav__devis" data-nav="devis">Mon devis <span class="badge" id="cartCount" aria-live="polite">0</span></a>
       </nav>
     </div>
@@ -61,6 +68,7 @@
           <a href="#/devis">Demander un devis gratuit</a>
           <a href="assets/docs/carte-saveurs-des-rois.pdf" download>Télécharger la carte (PDF)</a>
           <a href="#/contact">Nous contacter</a>
+          <button type="button" class="foot__installer" data-installer-info>📲 Installer l’application</button>
         </div>
         <div id="footSocial"></div>
       </div>
@@ -74,7 +82,18 @@
   </button>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="js/catalogue-data.js?v=2.8"></script>
-  <script src="js/app.js?v=2.8" defer></script>
+  <dialog class="installer" id="installerDialog" aria-labelledby="installerTitre">
+    <img src="assets/img/icon-192.png" alt="" width="72" height="72">
+    <h2 id="installerTitre">Installer Saveurs des Rois</h2>
+    <p>Retrouvez la collection et votre devis en un geste, comme une application, sur votre écran d’accueil ou votre bureau.</p>
+    <div id="installerEtapes"></div>
+    <form method="dialog" class="installer__actions">
+      <button class="btn btn--or" type="button" data-installer-go hidden>Installer</button>
+      <button class="btn btn--ligne" value="close">Fermer</button>
+    </form>
+  </dialog>
+
+  <script src="js/catalogue-data.js?v=2.9"></script>
+  <script src="js/app.js?v=2.9" defer></script>
 </body>
 </html>
