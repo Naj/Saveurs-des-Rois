@@ -60,7 +60,7 @@ function render() {
   $('#panel').innerHTML = fn();
   if (st.tab === 'medias') loadMedia();
   if (st.tab === 'stats') loadStats().catch(e => { $('#statsZone').innerHTML = `<p class="message message--err">${esc(e.message)}</p>`; });
-  if (st.tab === 'produits') refreshProdHelpers();
+  if (st.tab === 'produits') { refreshProdHelpers(); majGrille($('#prodForm')); }
 }
 
 /* ---------------- Demandes */
@@ -72,7 +72,7 @@ function demandeAvisLien(r) {
   return [tel && `<a href="https://wa.me/${tel}?text=${encodeURIComponent(texte)}" target="_blank" rel="noopener">Demander un avis (WhatsApp)</a>`,
     r.email && `<a href="mailto:${esc(r.email)}?subject=${encodeURIComponent('Votre avis compte pour nous')}&body=${encodeURIComponent(texte)}">Demander un avis (e-mail)</a>`].filter(Boolean).join('');
 }
-const ADMIN_VERSION = '2.5';
+const ADMIN_VERSION = '2.8';
 function alertBanner() {
   if (!st.version) return `<button class="adm-alerte adm-alerte--warn" data-goto="alertes">⚠️ Serveur du site pas à jour — voir l’onglet Alertes</button>`;
   const a = st.alerts || {};
@@ -133,6 +133,7 @@ function tDemandes() {
       ${r.message ? `<p style="white-space:pre-wrap">${esc(r.message)}</p>` : ''}
       <div class="adm-actions">
         <select data-status="${r.id}" aria-label="Statut">${STATUSES.map(s => `<option ${s === r.status ? 'selected' : ''}>${s}</option>`).join('')}</select>
+        ${r.kind === 'devis' ? `<a class="btn btn--or btn--petit" href="/admin/devis.html?id=${r.id}" target="_blank" rel="noopener">${r.quote ? 'Ouvrir le devis PDF' : 'Préparer le devis PDF'}</a>` : ''}
         ${r.email ? `<a href="mailto:${esc(r.email)}?subject=${encodeURIComponent('Votre devis Saveurs des Rois')}">Répondre par e-mail</a>` : ''}
         ${r.phone ? `<a href="https://wa.me/${esc(r.phone.replace(/\D/g, '').replace(/^0/, '33'))}" target="_blank" rel="noopener">WhatsApp</a>` : ''}
         ${r.kind === 'devis' && ['confirmé', 'archivé'].includes(r.status) ? demandeAvisLien(r) : ''}
@@ -200,7 +201,7 @@ function startDraft(mode) {
     ingredients: '', allergens: '', traces: '', image: '', gallery: [], visible: 0, featured: 0, position: (st.products.length + 1) * 10 };
   if (mode === 'copy') {
     const src = st.products.find(p => p.id === $('#copyFrom').value);
-    for (const k of ['price_mode', 'price_cents', 'price_kg_cents', 'min_kg', 'price_label', 'threshold', 'ingredients', 'allergens', 'traces', 'energy_kcal', 'proteins', 'carbs', 'fats', 'salt']) base[k] = src[k];
+    for (const k of ['price_mode', 'price_cents', 'price_kg_cents', 'min_kg', 'price_label', 'threshold', 'tiers', 'ingredients', 'allergens', 'traces', 'energy_kcal', 'proteins', 'carbs', 'fats', 'salt']) base[k] = src[k];
     base.copiedFrom = src.name;
   }
   st.draft = base;
@@ -214,6 +215,39 @@ function checklist(p) {
     ['Valeurs nutritionnelles', ['energy_kcal', 'proteins', 'carbs', 'fats', 'salt'].every(k => has(p[k])), false],
   ];
 }
+const PALIERS_DEFAUT = [10, 20, 30];
+function grilleLignes(p) {
+  const t = Array.isArray(p.tiers) ? [...p.tiers] : [];
+  PALIERS_DEFAUT.forEach((m, i) => { if (!t[i]) t[i] = { min: t.length ? (t[i - 1]?.min || 0) + 10 : m, price_cents: null }; });
+  return t.slice(0, Math.max(3, t.length));
+}
+function lireGrille(form) {
+  const out = [];
+  for (let i = 0; form.elements[`tier_min_${i}`]; i++) {
+    const min = parseInt(form.elements[`tier_min_${i}`].value, 10);
+    const pr = parseFloat(String(form.elements[`tier_price_${i}`].value).replace(',', '.'));
+    if (min >= 2 && Number.isFinite(pr) && pr > 0) out.push({ min, price_cents: Math.round(pr * 100) });
+  }
+  return out.sort((a, b) => a.min - b.min);
+}
+function majGrille(form) {
+  if (!form?.elements.tier_min_0) return;
+  const base = parseFloat(String(form.elements.price.value).replace(',', '.')) * 100;
+  const msgs = [];
+  let prec = base;
+  for (let i = 0; form.elements[`tier_min_${i}`]; i++) {
+    const cell = form.querySelector(`[data-remise="${i}"]`);
+    const pr = parseFloat(String(form.elements[`tier_price_${i}`].value).replace(',', '.')) * 100;
+    if (!Number.isFinite(pr) || !(base > 0)) { cell.textContent = ''; continue; }
+    cell.textContent = pr < base ? `− ${Math.round((1 - pr / base) * 100)} %` : '';
+    if (pr >= prec) msgs.push(`le palier ${form.elements[`tier_min_${i}`].value} pièces devrait être moins cher que le précédent`);
+    prec = Math.min(prec, pr);
+  }
+  const el = form.querySelector('#grilleMsg');
+  el.style.color = msgs.length ? 'var(--err)' : '';
+  el.textContent = msgs.length ? 'Attention : ' + msgs.join(' ; ') + '.' : 'Exemple : 0,70 € de base, puis 0,65 € dès 10, 0,60 € dès 20, 0,55 € dès 30 pièces.';
+}
+
 function prixOk(p) {
   const m = p.price_mode || 'piece';
   const piece = p.price_cents > 0, kg = p.price_kg_cents > 0;
@@ -221,7 +255,7 @@ function prixOk(p) {
 }
 function apercuPrix(p) {
   const m = p.price_mode || 'piece';
-  const piece = `<p class="carte__prix"><strong>${p.price_cents ? euro(p.price_cents) : '— €'}</strong> ${esc(p.price_label || 'la pièce')}</p>${p.threshold ? `<p class="carte__seuil">Prix dégressif à partir de ${esc(p.threshold)} pièces</p>` : ''}`;
+  const piece = `<p class="carte__prix"><strong>${p.price_cents ? euro(p.price_cents) : '— €'}</strong> ${esc(p.price_label || 'la pièce')}</p>${(p.tiers || []).length ? `<p class="carte__seuil">Dès ${p.tiers[0].min} pièces : ${euro(p.tiers[0].price_cents)}${p.tiers.length > 1 ? ` · jusqu’à ${euro(p.tiers.at(-1).price_cents)}` : ''}</p>` : ''}`;
   const kg = `<strong>${p.price_kg_cents ? euro(p.price_kg_cents) : '— €'}</strong> le kg`;
   if (m === 'devis') return '<p class="carte__prix"><strong>Prix sur devis</strong></p>';
   if (m === 'kg') return `<p class="carte__prix">${kg}</p><p class="carte__seuil">Professionnels · vente au poids</p>`;
@@ -269,17 +303,26 @@ function formProduit(p) {
       </div>
       <div class="si-piece">
         <p class="adm-sous">Particuliers · à la pièce</p>
-        <div class="trois">
-          <div class="champ"><label for="p-price">Prix (€)</label><input id="p-price" name="price" inputmode="decimal" value="${prix}" placeholder="Ex : 0,80"></div>
+        <div class="deux">
+          <div class="champ"><label for="p-price">Prix de base à la pièce (€)</label><input id="p-price" name="price" inputmode="decimal" value="${prix}" placeholder="Ex : 0,80"></div>
           ${f('price_label', 'Unité affichée', 'text', 'placeholder="la pièce"')}
-          ${f('threshold', 'Prix dégressif à partir de (pièces)', 'number', 'min="0" placeholder="Ex : 12 (vide = aucun)"')}
+        </div>
+        <div class="adm-grille">
+          <p class="adm-sous" style="margin-bottom:.3rem">Grille dégressive <small>(prix unitaire appliqué automatiquement ; laissez un prix vide pour désactiver le palier)</small></p>
+          <table>
+            <thead><tr><th>À partir de</th><th>Prix à la pièce</th><th>Remise</th></tr></thead>
+            <tbody>${grilleLignes(p).map((t, i) => `<tr>
+              <td><input name="tier_min_${i}" type="number" min="2" value="${esc(t.min)}" aria-label="Palier ${i + 1} : quantité"> pièces</td>
+              <td><input name="tier_price_${i}" inputmode="decimal" value="${t.price_cents ? (t.price_cents / 100).toFixed(2).replace('.', ',') : ''}" placeholder="—" aria-label="Palier ${i + 1} : prix"> €</td>
+              <td class="adm-remise" data-remise="${i}"></td></tr>`).join('')}</tbody>
+          </table>
+          <p class="note" id="grilleMsg"></p>
         </div>
       </div>
       <div class="si-kg">
         <p class="adm-sous">Professionnels · au poids <small>(prix fixe, jamais de dégressivité)</small></p>
         <div class="deux">
           <div class="champ"><label for="p-pricekg">Prix au kilo (€)</label><input id="p-pricekg" name="price_kg" inputmode="decimal" value="${p.price_kg_cents == null ? '' : (p.price_kg_cents / 100).toFixed(2).replace('.', ',')}" placeholder="Ex : 32,00"></div>
-          <div class="champ"><label for="p-minkg">Commande minimale (kg, facultatif)</label><input id="p-minkg" name="min_kg" inputmode="decimal" value="${p.min_kg == null ? '' : String(p.min_kg).replace('.', ',')}" placeholder="Ex : 2"></div>
         </div>
       </div>
       ${f('position', 'Ordre d’affichage (plus petit = en premier)', 'number')}
@@ -315,7 +358,7 @@ function formSnapshot(form) {
   const d = Object.fromEntries(new FormData(form));
   const price = parseFloat(String(d.price || '').replace(',', '.'));
   const pkg = parseFloat(String(d.price_kg || '').replace(',', '.'));
-  return { ...d, price_cents: Number.isFinite(price) ? Math.round(price * 100) : null, price_kg_cents: Number.isFinite(pkg) ? Math.round(pkg * 100) : null };
+  return { ...d, price_cents: Number.isFinite(price) ? Math.round(price * 100) : null, price_kg_cents: Number.isFinite(pkg) ? Math.round(pkg * 100) : null, tiers: lireGrille(form) };
 }
 function refreshProdHelpers() {
   const form = $('#prodForm'); if (!form) return;
@@ -338,8 +381,9 @@ function readProdForm(form) {
   const out = {
     name: d.name.trim(), arabic_name: d.arabic_name, tagline: d.tagline, description: d.description,
     price_mode: mode, price_cents: eur(d.price) ?? 0, price_kg_cents: eur(d.price_kg),
-    min_kg: d.min_kg ? parseFloat(String(d.min_kg).replace(',', '.')) || null : null,
-    price_label: d.price_label || 'la pièce', threshold: d.threshold || null, position: d.position || 0,
+    min_kg: null, // pas de minimum affiché : à voir au cas par cas
+    tiers: lireGrille(form),
+    price_label: d.price_label || 'la pièce', threshold: null, position: d.position || 0,
     ingredients: d.ingredients, allergens: d.allergens, traces: d.traces,
     energy_kcal: d.energy_kcal, proteins: d.proteins, carbs: d.carbs, fats: d.fats, salt: d.salt,
     image: d.image, gallery: [...form.querySelectorAll('#gal figure')].map(f => f.dataset.g),
@@ -483,6 +527,7 @@ const TEXT_FIELDS = [
   ['Accueil', [['hero_title', 'Titre (référencement Google)'], ['hero_text', 'Phrase d’accueil', 2], ['quote_note', 'Note sur les devis et prix dégressifs', 2]]],
   ['Notre histoire', [['story_title', 'Titre'], ['story_body', 'Votre histoire (une ligne vide = nouveau paragraphe)', 12], ['story_image', 'Photo', 0, 'pick']]],
   ['Contact', [['contact_phone', 'Téléphone'], ['contact_whatsapp', 'WhatsApp (numéro au format international, ex : 33612345678)'], ['contact_email', 'E-mail'], ['contact_instagram', 'Instagram (@compte ou lien)'], ['contact_tiktok', 'TikTok (@compte ou lien)'], ['contact_facebook', 'Facebook (page ou lien)'], ['contact_zone', 'Zone de retrait / livraison'], ['contact_hours', 'Disponibilités']]],
+  ['Devis PDF (non affiché sur le site)', [['company_name', 'Nom commercial (ex : Saveurs des Rois)'], ['company_owner', 'Nom et prénom de l’entrepreneur'], ['company_siret', 'SIRET'], ['company_address', 'Adresse', 2], ['company_phone', 'Téléphone sur le devis (vide = celui du contact)'], ['company_email', 'E-mail sur le devis (vide = celui du contact)'], ['quote_validity', 'Validité du devis en jours (ex : 30)'], ['quote_payment', 'Conditions de règlement (ex : Acompte de 30 % à la commande, solde au retrait)', 2], ['quote_legal', 'Mention fiscale', 2], ['quote_footer', 'Message de fin (facultatif)', 2]]],
   ['Ambiance & mentions', [['music_url', 'Lien d’une musique d’ambiance (facultatif, libre de droits)'], ['legal_text', 'Mentions légales', 10]]],
 ];
 function tTextes() {
@@ -596,7 +641,7 @@ panel.addEventListener('change', e => {
 });
 panel.addEventListener('input', e => {
   if (e.target.name === 'price_mode') $('#prixBloc').dataset.mode = e.target.value;
-  if (e.target.closest('#prodForm')) refreshProdHelpers();
+  if (e.target.closest('#prodForm')) { refreshProdHelpers(); majGrille(e.target.form); }
 });
 
 panel.addEventListener('click', e => {

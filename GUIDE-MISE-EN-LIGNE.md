@@ -188,11 +188,29 @@ Admin → **Produits** → la recette → section **2. Prix** → *Affichage du 
 | Choix | Ce que voit le client |
 |---|---|
 | **À la pièce** | Prix unitaire + « Prix dégressif à partir de N pièces » (seuil vide = pas de dégressivité) |
-| **Au kilo** | Prix au kg pour les professionnels, vente au poids (par 500 g), **jamais de dégressivité**, minimum de commande facultatif |
+| **Au kilo** | Prix au kg pour les professionnels, vente au poids (par tranche de 100 g, dès 100 g, sans minimum affiché), **jamais de dégressivité** |
 | **Les deux** | Deux blocs sur la fiche : *Particuliers · à la pièce* et *Professionnels · au poids* |
 | **Sur devis** | Aucun prix affiché : « Prix sur devis » ; le client indique un nombre de pièces |
 
 Dans les demandes de devis, les lignes au poids sont marquées **PRO** et calculées au kilo.
+
+---
+
+## Devis PDF à vos couleurs
+
+1. Une seule fois : admin → **Textes & contact → Devis PDF** : nom commercial, votre nom, **SIRET**, adresse, validité (ex. 30 jours), conditions de règlement. La mention « TVA non applicable, art. 293 B du CGI » est utilisée par défaut (micro-entrepreneur en franchise de TVA).
+2. Admin → **Demandes** → sur une demande de devis : **Préparer le devis PDF**.
+3. Le devis s'ouvre prérempli, en trois parties : **Particuliers — à la pièce**, **Professionnels — vente au poids (PRO)**, **Livraison et frais**. Tout se modifie en cliquant : quantités, prix unitaires (appliquez vos prix dégressifs ; un rappel vert signale les seuils atteints), lignes à ajouter, remise particuliers, acompte, remarques.
+4. **Télécharger en PDF** → dans la fenêtre d'impression, choisissez **Enregistrer au format PDF**. Le devis est enregistré : vous le retrouvez via **Ouvrir le devis PDF**.
+5. Boutons **Préparer l'e-mail** / **WhatsApp** (avec message prêt, joignez le PDF) et **Marquer « devis envoyé »**.
+
+---
+
+## Grille dégressive (10 / 20 / 30 pièces)
+
+Admin → **Produits** → la recette → **2. Prix** → *Grille dégressive* : trois paliers préremplis (10, 20, 30 pièces) ; indiquez le prix à la pièce de chaque palier. La remise en % s'affiche à côté ; un message vous prévient si un palier n'est pas moins cher que le précédent. Laissez un prix vide pour désactiver un palier ; les quantités des paliers sont modifiables.
+
+Sur le site : tableau des tarifs sur la fiche (le palier atteint est surligné), calcul en direct (« 18 × 0,65 € = 11,70 € — encore 2 pièces pour passer à 0,60 € »), prix appliqué automatiquement dans « Mon devis », dans l'estimation envoyée et dans le devis PDF. La vente au poids des professionnels n'est jamais concernée.
 
 ---
 

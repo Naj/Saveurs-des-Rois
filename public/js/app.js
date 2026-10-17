@@ -23,7 +23,7 @@ function saveSelection(sel) {
 }
 /* Clés de la sélection : "id" (à la pièce) ou "id@kg" (au poids, professionnels) */
 const cle = k => { const [id, u] = String(k).split('@'); return { id, kg: u === 'kg' }; };
-const kgTxt = n => `${(+n).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} kg`;
+const kgTxt = n => (+n < 1 ? `${Math.round(+n * 1000)} g` : `${(+n).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} kg`);
 const mode = p => p.price_mode || 'piece';
 function updateCount() {
   const sel = selection();
@@ -40,13 +40,38 @@ function toast(html) {
   toastTimer = setTimeout(() => t.classList.remove('is-on'), 4200);
 }
 
+/* Grille dégressive (paliers définis dans l'admin, ex. 10 / 20 / 30 pièces) */
+const paliers = p => (Array.isArray(p.tiers) ? p.tiers : []).filter(t => t.min >= 2 && t.price_cents > 0 && t.price_cents < p.price_cents).sort((a, b) => a.min - b.min);
+function prixUnitaire(p, qty) {
+  let prix = p.price_cents;
+  for (const t of paliers(p)) if (qty >= t.min && t.price_cents < prix) prix = t.price_cents;
+  return prix;
+}
+function palierSuivant(p, qty) { return paliers(p).find(t => qty < t.min); }
 function seuilTexte(p) {
+  const t = paliers(p);
+  if (t.length) return `Dès ${t[0].min} pièces : ${euro(t[0].price_cents)}${t.length > 1 ? ` · jusqu’à ${euro(t.at(-1).price_cents)}` : ''}`;
   return p.threshold ? `Prix dégressif à partir de ${p.threshold} pièces` : '';
+}
+function grilleHtml(p, qty) {
+  const t = paliers(p);
+  if (!t.length) return p.threshold ? `<p class="tarif__seuil">${seuilTexte(p)}</p>` : '';
+  const lignes = [{ de: 1, a: t[0].min - 1, prix: p.price_cents }, ...t.map((x, i) => ({ de: x.min, a: t[i + 1] ? t[i + 1].min - 1 : null, prix: x.price_cents }))];
+  const actuel = prixUnitaire(p, qty);
+  return `<table class="grille-prix" aria-label="Tarif dégressif">
+    <caption>Tarif dégressif</caption>
+    <tbody>${lignes.map(l => `<tr class="${l.prix === actuel && (l.a == null || qty <= l.a) && qty >= l.de ? 'actif' : ''}"><th scope="row">${l.a == null ? `${l.de} pièces et +` : l.de === l.a ? `${l.de} pièce${l.de > 1 ? 's' : ''}` : `${l.de} à ${l.a} pièces`}</th><td>${euro(l.prix)} <small>${esc(p.price_label || 'la pièce')}</small></td></tr>`).join('')}</tbody>
+  </table>`;
+}
+function messagePalier(p, qty) {
+  const suiv = palierSuivant(p, qty), prix = prixUnitaire(p, qty);
+  if (suiv) return `Encore ${suiv.min - qty} pièce${suiv.min - qty > 1 ? 's' : ''} pour passer à ${euro(suiv.price_cents)} la pièce`;
+  return prix < p.price_cents ? `Meilleur tarif atteint : ${euro(prix)} la pièce` : '';
 }
 /* Prix affiché sur les cartes de la collection, selon le mode choisi dans l'admin */
 function prixCarte(p) {
   const m = mode(p);
-  const piece = `<p class="carte__prix"><strong>${euro(p.price_cents)}</strong> ${esc(p.price_label || 'la pièce')}</p>${p.threshold ? `<p class="carte__seuil">${seuilTexte(p)}</p>` : ''}`;
+  const piece = `<p class="carte__prix"><strong>${euro(p.price_cents)}</strong> ${esc(p.price_label || 'la pièce')}</p>${seuilTexte(p) ? `<p class="carte__seuil">${seuilTexte(p)}</p>` : ''}`;
   const kg = `<p class="carte__prix"><strong>${euro(p.price_kg_cents || 0)}</strong> le kg</p>`;
   if (m === 'devis') return '<p class="carte__prix"><strong>Prix sur devis</strong></p>';
   if (m === 'kg') return `${kg}<p class="carte__seuil">Professionnels · vente au poids</p>`;
@@ -67,12 +92,12 @@ function carte(p) {
 }
 
 function qteControl(id, value, min = 1, kg = false) {
-  const pas = kg ? 0.5 : 1;
+  const pas = kg ? 0.1 : 1; // poids : par 100 g
   return `<div class="qte ${kg ? 'qte--kg' : ''}" data-qte="${esc(id)}" data-pas="${pas}">
-    <button type="button" data-step="-1" aria-label="${kg ? 'Retirer 500 g' : 'Retirer une unité'}">−</button>
+    <button type="button" data-step="-1" aria-label="${kg ? 'Retirer 100 g' : 'Retirer une unité'}">−</button>
     <input type="number" inputmode="decimal" min="${min}" max="${kg ? 500 : 5000}" step="${pas}" value="${value}" aria-label="${kg ? 'Poids en kg' : 'Quantité'}">
     ${kg ? '<span class="qte__unite">kg</span>' : ''}
-    <button type="button" data-step="1" aria-label="${kg ? 'Ajouter 500 g' : 'Ajouter une unité'}">+</button>
+    <button type="button" data-step="1" aria-label="${kg ? 'Ajouter 100 g' : 'Ajouter une unité'}">+</button>
   </div>`;
 }
 
@@ -309,7 +334,7 @@ function pageProduit(id) {
   const hasNutri = [p.energy_kcal, p.proteins, p.carbs, p.fats, p.salt].some(v => v != null);
   const videos = state.videos.filter(v => v.product_id === p.id);
   const autres = state.products.filter(x => x.id !== p.id).slice(0, 3);
-  const defaultQty = p.threshold || 1;
+  const defaultQty = paliers(p)[0]?.min || p.threshold || 1;
   const isBox = p.id === 'mix-box';
 
   return `
@@ -368,31 +393,36 @@ function pageProduit(id) {
 /* Bloc prix de la fiche produit : à la pièce, au poids (pros), les deux, ou sur devis */
 function blocTarif(p, defaultQty, isBox) {
   const m = mode(p);
-  const minKg = p.min_kg || 1;
   const piece = (titre) => `
     <div class="tarif">
       ${titre ? `<p class="tarif__public">${titre}</p>` : ''}
       <div class="tarif__prix">${m === 'devis' ? 'Prix sur devis' : `${euro(p.price_cents)}<small>${esc(p.price_label || 'la pièce')}</small>`}</div>
-      ${m !== 'devis' && p.threshold ? `<p class="tarif__seuil">${seuilTexte(p)}</p>` : ''}
+      ${m !== 'devis' ? `<div data-grille="${esc(p.id)}">${grilleHtml(p, defaultQty)}</div>` : ''}
       <div class="ajout">
         ${qteControl(p.id, defaultQty)}
         <button class="btn btn--sombre" type="button" data-add="${esc(p.id)}">Ajouter à mon devis</button>
       </div>
+      ${m !== 'devis' && paliers(p).length ? `<p class="tarif__calc" data-calc="${esc(p.id)}">${calcTexte(p, defaultQty)}</p>` : ''}
       ${isBox ? '<p class="note" style="margin:0">Vous préciserez la composition de vos box dans votre demande de devis.</p>' : ''}
     </div>`;
   const kg = (titre) => `
     <div class="tarif tarif--pro">
       ${titre ? `<p class="tarif__public">${titre}</p>` : ''}
       <div class="tarif__prix">${euro(p.price_kg_cents || 0)}<small>le kg</small></div>
-      <p class="tarif__seuil">Vente au poids, prix fixe sans tarif dégressif${p.min_kg ? ` · minimum ${kgTxt(p.min_kg)}` : ''}</p>
+      <p class="tarif__seuil">Vente au poids, prix fixe sans tarif dégressif</p>
       <div class="ajout">
-        ${qteControl(p.id + '@kg', minKg, p.min_kg || 0.5, true)}
+        ${qteControl(p.id + '@kg', 1, 0.1, true)}
         <button class="btn btn--sombre" type="button" data-add="${esc(p.id)}@kg">Ajouter à mon devis</button>
       </div>
     </div>`;
   if (m === 'kg') return kg('Professionnels');
   if (m === 'both') return `<div class="tarifs-duo">${piece('Particuliers · à la pièce')}${kg('Professionnels · au poids')}</div>`;
   return piece('');
+}
+
+function calcTexte(p, qty) {
+  const msg = messagePalier(p, qty);
+  return `${qty} × ${euro(prixUnitaire(p, qty))} = <strong>${euro(qty * prixUnitaire(p, qty))}</strong>${msg ? `<br><span>${msg}</span>` : ''}`;
 }
 
 function pageHistoire() {
@@ -451,7 +481,7 @@ function pageContact() {
 function pageDevis() {
   const sel = selection();
   const lignes = Object.entries(sel).map(([k, qty]) => ({ k, p: byId(cle(k).id), kg: cle(k).kg, qty })).filter(l => l.p);
-  const prixLigne = l => l.kg ? Math.round(l.qty * (l.p.price_kg_cents || 0)) : mode(l.p) === 'devis' ? 0 : l.p.price_cents * l.qty;
+  const prixLigne = l => l.kg ? Math.round(l.qty * (l.p.price_kg_cents || 0)) : mode(l.p) === 'devis' ? 0 : prixUnitaire(l.p, l.qty) * l.qty;
   const total = lignes.reduce((t, l) => t + prixLigne(l), 0);
   const avecDevis = lignes.some(l => !l.kg && mode(l.p) === 'devis');
   return `
@@ -467,6 +497,9 @@ function pageDevis() {
               <h3>${esc(p.name)}${kg ? ' <span class="etiquette-pro">Pro · au poids</span>' : ''}</h3>
               ${kg ? `<p>${euro(p.price_kg_cents || 0)} le kg · sans dégressivité</p>`
                 : mode(p) === 'devis' ? '<p>Prix sur devis</p>'
+                : paliers(p).length ? `<p>${prixUnitaire(p, qty) < p.price_cents ? `<s>${euro(p.price_cents)}</s> ` : ''}${euro(prixUnitaire(p, qty))} ${esc(p.price_label || 'la pièce')}</p>
+              ${prixUnitaire(p, qty) < p.price_cents ? '<p class="degressif">Tarif dégressif appliqué</p>' : ''}
+              ${messagePalier(p, qty) && palierSuivant(p, qty) ? `<p class="palier-suivant">${messagePalier(p, qty)}</p>` : ''}`
                 : `<p>${euro(p.price_cents)} ${esc(p.price_label || 'la pièce')}</p>
               ${p.threshold ? `<p class="${qty >= p.threshold ? 'degressif' : ''}">${qty >= p.threshold ? 'Prix dégressif appliqué dans votre devis' : `Prix dégressif dès ${p.threshold} pièces`}</p>` : ''}`}
             </div>
@@ -478,7 +511,7 @@ function pageDevis() {
           </div>`; }).join('')}
         </div>
         <div class="total"><span>Estimation</span><span>${euro(total)}</span></div>
-        <p class="note">Estimation au prix unitaire${avecDevis ? ', hors pâtisseries sur devis' : ''}. Le prix final, avec dégressivité éventuelle (hors vente au poids), figure dans votre devis gratuit.</p>
+        <p class="note">Estimation au prix unitaire${avecDevis ? ', hors pâtisseries sur devis' : ''}. Les tarifs dégressifs sont déjà appliqués ; le prix définitif figure dans votre devis gratuit.</p>
         <p><a href="#/collection">Ajouter d’autres pâtisseries</a></p>`
       : `<div class="vide"><h3 style="font-size:1.25rem">Votre sélection est vide</h3><p>Ajoutez des pâtisseries depuis la collection, ou envoyez directement votre demande : nous vous conseillerons.</p><a class="btn btn--sombre" href="#/collection">Parcourir la collection</a></div>`}
     </section>
@@ -572,7 +605,7 @@ main.addEventListener('click', e => {
   if (add) {
     const k = add.dataset.add, { id, kg } = cle(k);
     const v = parseFloat(String(main.querySelector(`[data-qte="${CSS.escape(k)}"] input`).value).replace(',', '.'));
-    const qty = kg ? Math.max(0.5, Math.round((v || 0) * 10) / 10) : Math.max(1, Math.round(v) || 1);
+    const qty = kg ? Math.max(0.1, Math.round((v || 0) * 10) / 10) : Math.max(1, Math.round(v) || 1);
     const sel = selection();
     sel[k] = kg ? Math.round(((sel[k] || 0) + qty) * 10) / 10 : (sel[k] || 0) + qty;
     saveSelection(sel);
@@ -597,7 +630,16 @@ main.addEventListener('click', e => {
   }
 });
 
+function majFiche(box) {
+  const p = byId(box.dataset.qte); if (!p) return;
+  const qty = Math.max(1, Math.round(parseFloat(String(box.querySelector('input').value).replace(',', '.')) || 1));
+  const g = main.querySelector(`[data-grille="${CSS.escape(p.id)}"]`); if (g) g.innerHTML = grilleHtml(p, qty);
+  const c = main.querySelector(`[data-calc="${CSS.escape(p.id)}"]`); if (c) c.innerHTML = calcTexte(p, qty);
+}
+main.addEventListener('input', e => { const b = e.target.closest('.tarif [data-qte]'); if (b && !cle(b.dataset.qte).kg) majFiche(b); });
 main.addEventListener('change', e => {
+  const fiche = e.target.closest('.tarif [data-qte]');
+  if (fiche && !cle(fiche.dataset.qte).kg) majFiche(fiche);
   const box = e.target.closest('.ligne [data-qte]');
   if (!box) return;
   const sel = selection();

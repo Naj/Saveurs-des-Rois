@@ -11,13 +11,15 @@
 /* ============================== Base de données : structure et contenu initial ============================== */
 
 
-const SCHEMA_VERSION = '4';
+const SCHEMA_VERSION = '6';
 
 // Colonnes ajoutées après la première version (ajoutées une à une, sans rien effacer)
 const ADD_COLUMNS = [
   "ALTER TABLE products ADD COLUMN price_mode TEXT DEFAULT 'piece'",   // piece | kg | both | devis
   'ALTER TABLE products ADD COLUMN price_kg_cents INTEGER',            // prix au kilo (professionnels)
   'ALTER TABLE products ADD COLUMN min_kg REAL',                       // commande minimale au kilo
+  'ALTER TABLE requests ADD COLUMN quote TEXT',
+  'ALTER TABLE products ADD COLUMN tiers TEXT',                        // grille dégressive : [{min, price_cents}]                        // devis PDF enregistré (JSON)
 ];
 
 const SCHEMA = [
@@ -290,16 +292,19 @@ const MAX_MEDIA_BYTES = 1_800_000; // limite D1 : ~2 Mo par ligne
 const PRODUCT_FIELDS = [
   'name', 'arabic_name', 'tagline', 'description', 'price_cents', 'price_label', 'threshold',
   'ingredients', 'allergens', 'traces', 'energy_kcal', 'proteins', 'carbs', 'fats', 'salt',
-  'image', 'gallery', 'featured', 'visible', 'position', 'price_mode', 'price_kg_cents', 'min_kg',
+  'image', 'gallery', 'featured', 'visible', 'position', 'price_mode', 'price_kg_cents', 'min_kg', 'tiers',
 ];
 const PRICE_MODES = ['piece', 'kg', 'both', 'devis'];
 const VIDEO_FIELDS = ['title', 'description', 'url', 'poster', 'product_id', 'visible', 'position'];
+// Réglages privés (devis) : modifiables dans l'admin, jamais renvoyés au site public
+const QUOTE_SETTINGS = ['company_name', 'company_owner', 'company_siret', 'company_address', 'company_phone', 'company_email',
+  'quote_validity', 'quote_payment', 'quote_legal', 'quote_footer'];
 const PUBLIC_SETTINGS = [
   'hero_title', 'hero_text', 'quote_note', 'story_title', 'story_body', 'story_image',
   'contact_phone', 'contact_whatsapp', 'contact_email', 'contact_instagram', 'contact_facebook',
   'contact_tiktok', 'contact_zone', 'contact_hours', 'music_url', 'legal_text',
 ];
-const APP_VERSION = '2.5';
+const APP_VERSION = '2.8';
 const GALLERY_FIELDS = ['image', 'title', 'event_type', 'caption', 'visible', 'position'];
 const REVIEW_STATUSES = ['en attente', 'publié', 'refusé'];
 const TRACK_PAGES = ['accueil', 'collection', 'p', 'histoire', 'evenements', 'avis', 'videos', 'contact', 'devis', 'mentions'];
@@ -450,7 +455,7 @@ async function adminApi(request, env, p, m) {
   if (p === '/api/admin/settings' && m === 'PUT') {
     const body = await request.json();
     const stmts = Object.entries(body)
-      .filter(([k]) => PUBLIC_SETTINGS.includes(k))
+      .filter(([k]) => PUBLIC_SETTINGS.includes(k) || QUOTE_SETTINGS.includes(k))
       .map(([k, v]) => db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').bind(k, String(v ?? '')));
     if (stmts.length) await db.batch(stmts);
     return json({ ok: true });
@@ -481,6 +486,30 @@ async function adminApi(request, env, p, m) {
   if (p === '/api/admin/requests' && m === 'GET') {
     const r = await db.prepare('SELECT * FROM requests ORDER BY created_at DESC LIMIT 300').all();
     return json({ requests: r.results.map(x => ({ ...x, items: safeJson(x.items, []) })) });
+  }
+  // Devis PDF : lecture d'une demande et enregistrement du devis rédigé
+  if ((mt = p.match(/^\/api\/admin\/requests\/(\d+)\/quote$/))) {
+    if (m === 'GET') {
+      const [req, prods, sets] = await db.batch([
+        db.prepare('SELECT * FROM requests WHERE id = ?').bind(mt[1]),
+        db.prepare('SELECT id, name, price_mode, price_cents, price_label, threshold, price_kg_cents, min_kg, tiers FROM products'),
+        db.prepare('SELECT key, value FROM settings'),
+      ]);
+      const r = req.results[0];
+      if (!r) return json({ error: 'Demande introuvable.' }, 404);
+      return json({
+        request: { ...r, items: safeJson(r.items, []), quote: safeJson(r.quote, null) },
+        products: prods.results.map(x => ({ ...x, tiers: cleanTiers(x.tiers) })),
+        settings: Object.fromEntries(sets.results.map(x => [x.key, x.value])),
+      });
+    }
+    if (m === 'PUT') {
+      const body = await request.text();
+      if (body.length > 60000) return json({ error: 'Devis trop volumineux.' }, 413);
+      try { JSON.parse(body); } catch { return json({ error: 'Devis illisible.' }, 400); }
+      await db.prepare('UPDATE requests SET quote = ? WHERE id = ?').bind(body, mt[1]).run();
+      return json({ ok: true });
+    }
   }
   if ((mt = p.match(/^\/api\/admin\/requests\/(\d+)$/))) {
     if (m === 'PUT') {
@@ -614,7 +643,7 @@ async function createRequest(request, env, url, ctx) {
   const checked = [];
   if (items.length) {
     const ids = items.map(i => String(i.id));
-    const rows = await env.DB.prepare(`SELECT id, name, price_cents, price_label, price_mode, price_kg_cents FROM products WHERE id IN (${ids.map(() => '?').join(',')})`).bind(...ids).all();
+    const rows = await env.DB.prepare(`SELECT id, name, price_cents, price_label, price_mode, price_kg_cents, tiers FROM products WHERE id IN (${ids.map(() => '?').join(',')})`).bind(...ids).all();
     const byId = Object.fromEntries(rows.results.map(r => [r.id, r]));
     for (const it of items) {
       const prod = byId[it.id];
@@ -632,8 +661,10 @@ async function createRequest(request, env, url, ctx) {
         const qty = Math.max(0, Math.min(5000, toInt(it.qty) || 0));
         if (!qty) continue;
         const surDevis = mode === 'devis';
-        checked.push({ id: prod.id, name: prod.name, qty, unit: 'piece', unit_cents: surDevis ? 0 : prod.price_cents, label: surDevis ? 'sur devis' : prod.price_label });
-        if (!surDevis) estimate += qty * prod.price_cents;
+        const unit = surDevis ? 0 : unitPrice(prod, qty);
+        checked.push({ id: prod.id, name: prod.name, qty, unit: 'piece', unit_cents: unit, base_cents: surDevis ? 0 : prod.price_cents,
+          label: surDevis ? 'sur devis' : prod.price_label + (unit < prod.price_cents ? ' (dégressif)' : '') });
+        estimate += qty * unit;
       }
     }
   }
@@ -850,11 +881,27 @@ function normalizeProduct(data) {
   for (const k of ['price_cents', 'price_kg_cents', 'threshold', 'featured', 'visible', 'position']) if (k in data) data[k] = data[k] == null ? null : toInt(data[k]);
   if ('min_kg' in data) data.min_kg = data.min_kg == null ? null : toNum(data.min_kg);
   if ('price_mode' in data && !PRICE_MODES.includes(data.price_mode)) data.price_mode = 'piece';
+  if ('tiers' in data) data.tiers = JSON.stringify(cleanTiers(data.tiers));
   for (const k of ['energy_kcal', 'proteins', 'carbs', 'fats', 'salt']) if (k in data) data[k] = data[k] == null ? null : toNum(data[k]);
   for (const k of ['featured', 'visible', 'position']) if (k in data && data[k] == null) data[k] = 0;
   return data;
 }
-function parseProduct(p) { return { ...p, gallery: safeJson(p.gallery, []) }; }
+function parseProduct(p) { return { ...p, gallery: safeJson(p.gallery, []), tiers: cleanTiers(safeJson(p.tiers, [])) }; }
+// Grille dégressive : paliers valides (quantité ≥ 2, prix > 0), triés par quantité croissante
+function cleanTiers(t) {
+  if (typeof t === 'string') t = safeJson(t, []);
+  if (!Array.isArray(t)) return [];
+  const seen = new Set();
+  return t.map(x => ({ min: toInt(x?.min), price_cents: toInt(x?.price_cents) }))
+    .filter(x => x.min >= 2 && x.price_cents > 0 && !seen.has(x.min) && seen.add(x.min))
+    .sort((a, b) => a.min - b.min).slice(0, 6);
+}
+// Prix unitaire applicable pour une quantité : le palier le plus élevé atteint, sinon le prix de base
+function unitPrice(p, qty) {
+  let price = p.price_cents;
+  for (const t of cleanTiers(p.tiers)) if (qty >= t.min && t.price_cents < price) price = t.price_cents;
+  return price;
+}
 function safeJson(s, fallback) { try { return JSON.parse(s ?? ''); } catch { return fallback; } }
 function toInt(v) { const n = parseInt(v, 10); return Number.isFinite(n) ? n : null; }
 function toNum(v) { const n = parseFloat(String(v).replace(',', '.')); return Number.isFinite(n) ? n : null; }

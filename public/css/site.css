@@ -379,3 +379,16 @@ table.nutri td { text-align: right; font-variant-numeric: tabular-nums lining-nu
 .qte__unite { font-weight: 600; padding-right: .3rem; }
 .etiquette-pro { display: inline-block; font: 600 .68rem var(--f-titre); letter-spacing: .05em; text-transform: uppercase; background: var(--nuit); color: var(--or); padding: .15rem .5rem; border-radius: 999px; vertical-align: middle; margin-left: .3rem; }
 @media (max-width: 900px) { .tarifs-duo { grid-template-columns: 1fr; } .tarifs-duo .tarif + .tarif { margin-top: 0; } }
+
+/* ================= Grille dégressive ================= */
+.grille-prix { border-collapse: collapse; width: 100%; max-width: 22rem; font-size: 1.02rem; }
+.grille-prix caption { text-align: left; font: 600 .78rem var(--f-titre); letter-spacing: .06em; text-transform: uppercase; color: var(--or-profond); padding-bottom: .3rem; }
+.grille-prix th, .grille-prix td { padding: .35rem .5rem; border-bottom: 1px solid #ecdfc3; font-weight: 400; text-align: left; }
+.grille-prix td { text-align: right; font-variant-numeric: tabular-nums lining-nums; white-space: nowrap; }
+.grille-prix small { color: var(--encre-douce); font-style: italic; }
+.grille-prix tr.actif { background: #f6ecd2; }
+.grille-prix tr.actif th, .grille-prix tr.actif td { font-weight: 600; }
+.grille-prix tr.actif th::before { content: "▸ "; color: var(--or-profond); }
+.tarif__calc { margin: 0; font-size: 1.02rem; }
+.tarif__calc span, .palier-suivant { color: var(--ok); font-size: .95rem; }
+.ligne s { color: var(--encre-douce); }

@@ -41,8 +41,8 @@ GitHub (code)  ──commit──▶  Cloudflare Pages (ou Workers) ──▶  S
 
 | Onglet | Ce que vous pouvez faire |
 |---|---|
-| Demandes | Demandes de devis et messages : statut, réponse par e-mail ou WhatsApp ; état des alertes et envoi d'un test |
-| Produits | **Ajouter une recette** (fiche guidée ou copie d'une fiche existante, aperçu, liste « Prêt à publier ? ») ; nom, nom arabe, description, prix, seuil dégressif, photos, ingrédients, allergènes, valeurs nutritionnelles ; masquer, mettre en avant, ajouter, supprimer |
+| Demandes | Demandes de devis et messages : **devis PDF à vos couleurs** (particuliers / pros), statut, réponse par e-mail ou WhatsApp ; état des alertes et envoi d'un test |
+| Produits | **Ajouter une recette** (fiche guidée ou copie d'une fiche existante, aperçu, liste « Prêt à publier ? ») ; nom, nom arabe, description, prix (pièce, kilo, les deux ou sur devis), **grille dégressive à paliers**, photos, ingrédients, allergènes, valeurs nutritionnelles ; masquer, mettre en avant, ajouter, supprimer |
 | Galerie | Photos de vos événements (titre, occasion, légende), affichées sur la page « Vos événements » et l'accueil |
 | Avis | Valider, refuser, répondre aux avis ; ajouter un avis reçu par message |
 | Statistiques | Visites, pâtisseries consultées, ajouts au devis, demandes, provenance, appareils (mesure anonyme sans cookie) |
