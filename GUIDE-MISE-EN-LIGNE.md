@@ -239,6 +239,34 @@ Rien à configurer : c'est actif dès la mise en ligne (le site doit être en `h
 
 ---
 
+## Installer l'administration sur votre téléphone ou ordinateur
+
+Ouvrez **https://votre-site/admin**, puis :
+- **Ordinateur (Chrome, Edge)** et **Android** : bouton **📲 Installer l'admin** en haut de l'administration (ou icône ⊕ dans la barre d'adresse) ;
+- **iPhone / iPad** : dans **Safari**, **Partager** ⬆︎ → **Sur l'écran d'accueil** → **Ajouter**.
+
+L'icône dorée **SDR Gestion** (distincte de l'icône noire du site public) ouvre directement l'administration, avec des raccourcis Demandes, Produits et Statistiques. Cochez **Rester connectée 30 jours** à la connexion pour ne pas retaper le mot de passe (à décocher sur un ordinateur partagé). L'administration n'est jamais mise en cache : elle affiche toujours vos données à jour.
+
+---
+
+## Musique d'ambiance
+
+Admin → **Textes & contact** → *Musique d'ambiance* → **Importer un fichier audio (MP3, M4A)** : le fichier est stocké chez Cloudflare et la musique est aussitôt active (bouton « Ambiance » en bas à gauche du site, jamais lancée automatiquement). Un lecteur permet de l'écouter et confirme « ✓ Lecture possible ».
+
+- Le **MP3** est lu par tous les navigateurs ; le M4A par Chrome, Edge et Safari.
+- Un **lien YouTube, Spotify ou Deezer ne fonctionne pas** : ce ne sont pas des fichiers audio. Les liens **Dropbox** et **Google Drive** sont convertis automatiquement, mais l'import du fichier reste le plus fiable.
+- Uniquement une musique **libre de droits ou sous licence** (SACEM) : un titre du commerce ne peut pas être diffusé sur un site professionnel sans autorisation.
+
+---
+
+## Carte PDF
+
+Admin → **Carte PDF** : choisissez ce que propose le lien « Télécharger la carte » du site.
+- **Carte générée depuis vos fiches** : couverture, tableau des tarifs et une page par pâtisserie (photo, prix, grille dégressive, prix pros, ingrédients, allergènes, valeurs nutritionnelles). **Toujours à jour** : rien à refaire quand vous changez un prix. Bouton *Ouvrir la carte générée* pour l'enregistrer en PDF et l'envoyer.
+- **Mon fichier PDF** : importez votre propre carte (Canva, Word…, 25 Mo maximum) ; *Revenir à la carte d'origine* rétablit celle fournie avec le site.
+
+---
+
 ## Au quotidien
 
 | Je veux… | Où |

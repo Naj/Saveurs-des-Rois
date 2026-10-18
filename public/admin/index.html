@@ -6,11 +6,18 @@
   <meta name="robots" content="noindex, nofollow">
   <title>Administration — Saveurs des Rois</title>
   <link rel="icon" type="image/png" href="/assets/img/favicon.png">
+  <link rel="manifest" href="/admin/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/assets/img/admin-apple-touch-icon.png">
+  <meta name="theme-color" content="#050505">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="SDR Gestion">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Amiri&family=Cinzel:wght@600&family=EB+Garamond:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/site.css?v=2.9">
-  <link rel="stylesheet" href="/admin/admin.css?v=2.9">
+  <link rel="stylesheet" href="/css/site.css?v=3.0">
+  <link rel="stylesheet" href="/admin/admin.css?v=3.0">
 </head>
 <body class="adm">
   <header class="top">
@@ -18,7 +25,10 @@
       <a class="brand" href="/" target="_blank" rel="noopener" title="Voir le site">
         <img src="/assets/img/logo-mark.webp" alt="" width="30" height="46"><span>Administration</span>
       </a>
-      <button class="btn btn--ligne adm-out" id="logout" hidden>Se déconnecter</button>
+      <div class="adm-tete">
+        <button class="btn btn--ligne adm-out" id="installAdmin" type="button" hidden>📲 Installer l’admin</button>
+        <button class="btn btn--ligne adm-out" id="logout" hidden>Se déconnecter</button>
+      </div>
     </div>
   </header>
 
@@ -28,6 +38,7 @@
       <form id="loginForm" class="panneau">
         <div class="message message--err" id="loginMsg" hidden></div>
         <div class="champ"><label for="pw">Mot de passe</label><input id="pw" type="password" autocomplete="current-password" required></div>
+        <label class="consent" style="margin-top:0"><input type="checkbox" id="remember" checked> <span>Rester connectée 30 jours sur cet appareil (décochez sur un ordinateur partagé)</span></label>
         <button class="btn btn--or" type="submit" style="width:100%">Se connecter</button>
       </form>
     </section>
@@ -39,6 +50,7 @@
         <button role="tab" data-tab="galerie">Galerie</button>
         <button role="tab" data-tab="avis">Avis <span class="badge" id="avisCount" hidden></span></button>
         <button role="tab" data-tab="stats">Statistiques</button>
+        <button role="tab" data-tab="carte">Carte PDF</button>
         <button role="tab" data-tab="sauvegarde">Sauvegarde</button>
         <button role="tab" data-tab="alertes">Alertes <span id="alertDot" class="adm-dot" hidden></span></button>
         <button role="tab" data-tab="textes">Textes &amp; contact</button>
@@ -56,7 +68,17 @@
     <div class="adm-gal" id="pickerGrid"></div>
   </dialog>
 
+  <dialog class="adm-dialog adm-install" id="installAide" aria-labelledby="installTitre">
+    <form method="dialog" class="adm-dialog__head"><h2 id="installTitre">Installer l’administration</h2><button class="lien" value="cancel">Fermer</button></form>
+    <img src="/assets/img/admin-icon-192.png" alt="" width="72" height="72">
+    <p>Une icône « SDR Gestion » sur votre écran d’accueil ou votre bureau, qui ouvre directement l’administration en plein écran.</p>
+    <p><strong>iPhone / iPad (Safari)</strong> : touchez <strong>Partager</strong> ⬆︎ puis <strong>Sur l’écran d’accueil</strong> → <strong>Ajouter</strong>.</p>
+    <p><strong>Android</strong> : menu <strong>⋮</strong> → <strong>Installer l’application</strong>.</p>
+    <p><strong>Ordinateur (Chrome, Edge)</strong> : icône d’installation ⊕ à droite de la barre d’adresse, ou menu <strong>⋮</strong> → <strong>Installer SDR Gestion</strong>.</p>
+    <p class="note">Ouvrez l’administration depuis cette adresse (…/admin) avant d’installer, pour que l’icône mène bien à l’admin et non au site.</p>
+  </dialog>
+
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="/admin/admin.js?v=2.9" type="module"></script>
+  <script src="/admin/admin.js?v=3.0" type="module"></script>
 </body>
 </html>

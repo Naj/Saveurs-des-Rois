@@ -322,7 +322,7 @@ function pageCollection() {
   <section class="section" style="padding-top:1.5rem">
     <div class="wrap">
       <div class="grille">${state.products.map(carte).join('')}</div>
-      <p class="centre note" style="margin-top:3rem">Envie de tout avoir sous la main ? <a href="${asset('/assets/docs/carte-saveurs-des-rois.pdf')}" download>Télécharger la carte (PDF)</a></p>
+      <p class="centre note" style="margin-top:3rem">Envie de tout avoir sous la main ? <a ${carteAttrs()}>Télécharger la carte (PDF)</a></p>
     </div>
   </section>`;
 }
@@ -691,21 +691,45 @@ burger.addEventListener('click', () => {
 });
 
 /* musique d'ambiance (désactivée par défaut, jamais en lecture automatique) */
+/* Lien de musique : seuls les fichiers audio directs sont lisibles par un navigateur.
+   Les liens de partage Dropbox et Google Drive sont convertis en lien direct. */
+function lienAudio(u) {
+  u = String(u || '').trim();
+  if (!u) return { url: '' };
+  if (/youtu\.?be|youtube\.com/i.test(u)) return { url: '', err: 'youtube' };
+  if (/spotify\.com|deezer\.com|music\.apple\.com|soundcloud\.com|music\.amazon/i.test(u)) return { url: '', err: 'streaming' };
+  let m;
+  if ((m = u.match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?(?:.*&)?id=)([\w-]{10,})/))) return { url: `https://drive.google.com/uc?export=download&id=${m[1]}`, conv: 'drive' };
+  if (/dropbox\.com/i.test(u)) { try { const x = new URL(u); x.searchParams.delete('dl'); x.searchParams.set('raw', '1'); return { url: x.toString(), conv: 'dropbox' }; } catch { } }
+  if (/^http:\/\//i.test(u)) return { url: '', err: 'http' };
+  return { url: u };
+}
 function setupMusic() {
-  const url = set('music_url');
+  const l = lienAudio(set('music_url'));
   const btn = document.getElementById('musicBtn');
-  if (!url) return;
-  const audio = new Audio(url);
-  audio.loop = true; audio.volume = 0.35;
+  if (!l.url) return;
+  const audio = new Audio();
+  audio.preload = 'none'; audio.loop = true; audio.volume = 0.35; audio.src = l.url;
   btn.hidden = false;
+  const off = () => btn.setAttribute('aria-pressed', 'false');
+  audio.addEventListener('pause', off);
+  audio.addEventListener('playing', () => btn.setAttribute('aria-pressed', 'true'));
+  audio.addEventListener('error', () => { off(); toast('La musique d’ambiance n’a pas pu être lue.'); });
   btn.addEventListener('click', () => {
-    const on = audio.paused;
-    on ? audio.play().catch(() => {}) : audio.pause();
-    btn.setAttribute('aria-pressed', String(on));
+    if (audio.paused) audio.play().catch(() => { off(); toast('La musique d’ambiance n’a pas pu être lue.'); });
+    else audio.pause();
   });
 }
 
+/* Lien « Télécharger la carte » : votre fichier PDF, ou la carte générée depuis les fiches */
+function carteAttrs() {
+  if (IS_FILE) return 'href="assets/docs/carte-saveurs-des-rois.pdf" download';
+  return set('carte_mode') === 'auto' ? 'href="/carte.html" target="_blank" rel="noopener"' : 'href="/carte.pdf" target="_blank" rel="noopener"';
+}
+
 function footer() {
+  const c = document.querySelector('[data-carte]');
+  if (c) c.outerHTML = `<a data-carte ${carteAttrs()}>Télécharger la carte (PDF)</a>`;
   document.getElementById('year').textContent = new Date().getFullYear();
   const s = state.settings;
   const links = [

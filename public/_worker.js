@@ -11,7 +11,7 @@
 /* ============================== Base de données : structure et contenu initial ============================== */
 
 
-const SCHEMA_VERSION = '6';
+const SCHEMA_VERSION = '7';
 
 // Colonnes ajoutées après la première version (ajoutées une à une, sans rien effacer)
 const ADD_COLUMNS = [
@@ -33,7 +33,9 @@ const SCHEMA = [
   "CREATE TABLE IF NOT EXISTS gallery ( id INTEGER PRIMARY KEY AUTOINCREMENT, image TEXT NOT NULL, title TEXT, event_type TEXT, caption TEXT, visible INTEGER DEFAULT 1, position INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')) )",
   "CREATE TABLE IF NOT EXISTS reviews ( id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, event_type TEXT, rating INTEGER NOT NULL, text TEXT NOT NULL, reply TEXT, source TEXT DEFAULT 'site', status TEXT DEFAULT 'en attente', event_date TEXT, created_at TEXT DEFAULT (datetime('now')) )",
   "CREATE INDEX IF NOT EXISTS idx_reviews_status ON reviews(status, created_at)",
-  "CREATE TABLE IF NOT EXISTS stats ( day TEXT NOT NULL, kind TEXT NOT NULL, key TEXT NOT NULL DEFAULT '', n INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (day, kind, key) )"
+  "CREATE TABLE IF NOT EXISTS stats ( day TEXT NOT NULL, kind TEXT NOT NULL, key TEXT NOT NULL DEFAULT '', n INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (day, kind, key) )",
+  "CREATE TABLE IF NOT EXISTS file_meta ( id TEXT PRIMARY KEY, name TEXT, mime TEXT, size INTEGER, chunks INTEGER, updated_at TEXT DEFAULT (datetime('now')) )",
+  "CREATE TABLE IF NOT EXISTS file_chunks ( id TEXT NOT NULL, idx INTEGER NOT NULL, data BLOB NOT NULL, PRIMARY KEY (id, idx) )"
 ];
 
 // Requêtes paramétrées : aucun souci d'apostrophes ni de retours à la ligne.
@@ -299,12 +301,18 @@ const VIDEO_FIELDS = ['title', 'description', 'url', 'poster', 'product_id', 'vi
 // Réglages privés (devis) : modifiables dans l'admin, jamais renvoyés au site public
 const QUOTE_SETTINGS = ['company_name', 'company_owner', 'company_siret', 'company_address', 'company_phone', 'company_email',
   'quote_validity', 'quote_payment', 'quote_legal', 'quote_footer'];
-const PUBLIC_SETTINGS = [
+// Fichiers volumineux (musique, carte PDF) découpés en morceaux de 1,5 Mo dans D1
+const FILES = {
+  musique: { types: /^audio\/(mpeg|mp3|mp4|x-m4a|m4a|aac|ogg|wav|x-wav|webm)$/, max: 15_000_000, label: 'un fichier audio (MP3, M4A, OGG)' },
+  carte: { types: /^application\/pdf$/, max: 25_000_000, label: 'un fichier PDF' },
+};
+const CHUNK = 1_500_000;
+const PUBLIC_SETTINGS = ['carte_mode', 
   'hero_title', 'hero_text', 'quote_note', 'story_title', 'story_body', 'story_image',
   'contact_phone', 'contact_whatsapp', 'contact_email', 'contact_instagram', 'contact_facebook',
   'contact_tiktok', 'contact_zone', 'contact_hours', 'music_url', 'legal_text',
 ];
-const APP_VERSION = '2.9';
+const APP_VERSION = '3.0';
 // Colonnes restaurées depuis une sauvegarde (les colonnes inconnues sont ignorées)
 const RESTORE_COLUMNS = {
   products: ['id', 'name', 'arabic_name', 'tagline', 'description', 'price_cents', 'price_label', 'threshold', 'ingredients', 'allergens', 'traces',
@@ -316,7 +324,10 @@ const RESTORE_COLUMNS = {
   reviews: ['id', 'name', 'event_type', 'rating', 'text', 'reply', 'source', 'status', 'event_date', 'created_at'],
   requests: ['id', 'kind', 'name', 'email', 'phone', 'event_date', 'event_type', 'delivery', 'message', 'items', 'estimate_cents', 'status', 'created_at', 'quote'],
   media: ['id', 'name', 'mime', 'size', 'data', 'created_at'],
+  file_meta: ['id', 'name', 'mime', 'size', 'chunks', 'updated_at'],
+  file_chunks: ['id', 'idx', 'data'],
 };
+const BINARY_TABLES = ['media', 'file_chunks'];
 const GALLERY_FIELDS = ['image', 'title', 'event_type', 'caption', 'visible', 'position'];
 const REVIEW_STATUSES = ['en attente', 'publié', 'refusé'];
 const TRACK_PAGES = ['accueil', 'collection', 'p', 'histoire', 'evenements', 'avis', 'videos', 'contact', 'devis', 'mentions'];
@@ -328,11 +339,13 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
     try {
-      if (path.startsWith('/api/') || path.startsWith('/media/')) {
+      if (path.startsWith('/api/') || path.startsWith('/media/') || path === '/carte.pdf') {
         if (!env.DB) return json({ error: 'Base de données non reliée. Cloudflare Pages : Settings → Bindings → ajouter une base D1 nommée DB. Cloudflare Workers : vérifier database_id dans wrangler.jsonc.' }, 500);
         await ensureDb(env);
       }
       if (path.startsWith('/api/')) return await api(request, env, url, ctx);
+      if (path === '/carte.pdf') return await serveCarte(request, env);
+      if (path.startsWith('/media/fichier/')) return await serveFile(request, env, path.slice(15));
       if (path.startsWith('/media/')) return await serveMedia(request, env, path.slice(7));
       return env.ASSETS.fetch(request);
     } catch (err) {
@@ -604,19 +617,57 @@ async function adminApi(request, env, p, m) {
   }
 
   // Statistiques (mesure d'audience anonyme)
+  // Fichiers : musique d'ambiance et carte PDF
+  if (p === '/api/admin/files' && m === 'GET') {
+    const r = await db.prepare('SELECT id, name, mime, size, chunks, updated_at FROM file_meta').all();
+    return json({ files: Object.fromEntries(r.results.map(f => [f.id, f])) });
+  }
+  if ((mt = p.match(/^\/api\/admin\/files\/(musique|carte)$/))) {
+    const id = mt[1], conf = FILES[id];
+    if (m === 'POST') {
+      const type = (request.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase();
+      if (!conf.types.test(type)) return json({ error: `Choisissez ${conf.label}.` }, 415);
+      const buf = new Uint8Array(await request.arrayBuffer());
+      if (!buf.length) return json({ error: 'Fichier vide.' }, 400);
+      if (buf.length > conf.max) return json({ error: `Fichier trop lourd (${Math.round(conf.max / 1e6)} Mo maximum).` }, 413);
+      const name = decodeURIComponent(request.headers.get('X-Filename') || id).slice(0, 120);
+      const n = Math.ceil(buf.length / CHUNK);
+      await db.prepare('DELETE FROM file_chunks WHERE id = ?').bind(id).run();
+      for (let i = 0; i < n; i++) {
+        await db.prepare('INSERT INTO file_chunks (id, idx, data) VALUES (?, ?, ?)').bind(id, i, buf.subarray(i * CHUNK, (i + 1) * CHUNK)).run();
+      }
+      await db.prepare(`INSERT OR REPLACE INTO file_meta (id, name, mime, size, chunks, updated_at) VALUES (?, ?, ?, ?, ?, datetime('now'))`)
+        .bind(id, name, type === 'audio/mp3' ? 'audio/mpeg' : type === 'audio/x-m4a' || type === 'audio/m4a' ? 'audio/mp4' : type, buf.length, n).run();
+      const url = id === 'musique' ? `/media/fichier/musique?v=${Date.now()}` : '/carte.pdf';
+      if (id === 'musique') {
+        await db.prepare("INSERT INTO settings (key, value) VALUES ('music_url', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(url).run();
+      } else {
+        await db.prepare("INSERT INTO settings (key, value) VALUES ('carte_mode', 'fichier') ON CONFLICT(key) DO UPDATE SET value = excluded.value").run();
+      }
+      return json({ ok: true, url, size: buf.length });
+    }
+    if (m === 'DELETE') {
+      await db.batch([db.prepare('DELETE FROM file_chunks WHERE id = ?').bind(id), db.prepare('DELETE FROM file_meta WHERE id = ?').bind(id)]);
+      if (id === 'musique') await db.prepare("UPDATE settings SET value = '' WHERE key = 'music_url' AND value LIKE '/media/fichier/musique%'").run();
+      return json({ ok: true });
+    }
+  }
+
   // Sauvegarde complète (fichier JSON téléchargé) et restauration
   if (p === '/api/admin/backup' && m === 'GET') {
     const withMedia = new URL(request.url).searchParams.get('media') === '1';
     const q = sql => db.prepare(sql);
     const res = await db.batch([q('SELECT * FROM products ORDER BY position'), q('SELECT * FROM settings'), q('SELECT * FROM videos'),
       q('SELECT * FROM gallery'), q('SELECT * FROM reviews'), q('SELECT * FROM requests'),
-      withMedia ? q('SELECT id, name, mime, size, data, created_at FROM media') : q('SELECT id FROM media WHERE 0')]);
-    const [products, settings, videos, gallery, reviews, requests, media] = res.map(r => r.results);
+      withMedia ? q('SELECT id, name, mime, size, data, created_at FROM media') : q('SELECT id FROM media WHERE 0'),
+      withMedia ? q('SELECT * FROM file_meta') : q('SELECT id FROM file_meta WHERE 0'),
+      withMedia ? q('SELECT id, idx, data FROM file_chunks ORDER BY id, idx') : q('SELECT id FROM file_chunks WHERE 0')]);
+    const [products, settings, videos, gallery, reviews, requests, media, file_meta, file_chunks] = res.map(r => r.results);
     const b64 = buf => { const u = new Uint8Array(buf); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode(...u.subarray(i, i + 0x8000)); return btoa(s); };
     const body = {
       format: 'saveurs-des-rois-backup', version: 1, app: APP_VERSION, created_at: new Date().toISOString(),
       tables: { products, settings: settings.filter(x => x.key !== 'schema_version'), videos, gallery, reviews, requests,
-        media: media.map(x => ({ ...x, data: b64(x.data) })) },
+        media: media.map(x => ({ ...x, data: b64(x.data) })), file_meta, file_chunks: file_chunks.map(x => ({ ...x, data: b64(x.data) })) },
     };
     const day = parisDay(Date.now());
     return new Response(JSON.stringify(body), { headers: {
@@ -638,15 +689,16 @@ async function adminApi(request, env, p, m) {
         if (!row || typeof row !== 'object') continue;
         const vals = cols.map(c => {
           let v = row[c] ?? null;
-          if (table === 'media' && c === 'data') v = v ? Uint8Array.from(atob(v), ch => ch.charCodeAt(0)) : null;
+          if (BINARY_TABLES.includes(table) && c === 'data') v = v ? Uint8Array.from(atob(v), ch => ch.charCodeAt(0)) : null;
           else if (v !== null && typeof v === 'object') v = JSON.stringify(v);
           return v;
         });
         if (table === 'settings' && row.key === 'schema_version') continue;
-        if (table === 'media' && !vals[cols.indexOf('data')]) continue;
+        if (BINARY_TABLES.includes(table) && !vals[cols.indexOf('data')]) continue;
         stmts.push(db.prepare(`INSERT OR REPLACE INTO ${table} (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`).bind(...vals));
       }
-      for (let i = 0; i < stmts.length; i += 50) await db.batch(stmts.slice(i, i + 50));
+      const lot = table === 'file_chunks' ? 1 : table === 'media' ? 5 : 50; // gros fichiers : un par un
+      for (let i = 0; i < stmts.length; i += lot) await db.batch(stmts.slice(i, i + lot));
       counts[table] = stmts.length;
     }
     return json({ ok: true, counts });
@@ -744,6 +796,41 @@ async function createRequest(request, env, url, ctx) {
   const alert = notify(env, record, url.origin).catch(err => console.error('Alerte non envoyée :', err.message));
   if (ctx?.waitUntil) ctx.waitUntil(alert);
   return json({ ok: true, estimate_cents: estimate });
+}
+
+// Fichier découpé (musique, carte) : réassemblé, avec prise en charge des requêtes partielles
+// (Range), indispensables à la lecture audio sur iPhone / Safari.
+async function serveFile(request, env, id, opts = {}) {
+  if (!FILES[id]) return new Response('Introuvable', { status: 404 });
+  const meta = await env.DB.prepare('SELECT * FROM file_meta WHERE id = ?').bind(id).first();
+  if (!meta) return opts.fallback ? opts.fallback() : new Response('Introuvable', { status: 404 });
+  const rows = (await env.DB.prepare('SELECT data FROM file_chunks WHERE id = ? ORDER BY idx').bind(id).all()).results;
+  const full = new Uint8Array(meta.size);
+  let off = 0;
+  for (const r of rows) { const d = new Uint8Array(r.data); full.set(d, off); off += d.length; }
+  const headers = {
+    'Content-Type': meta.mime, 'Accept-Ranges': 'bytes', 'Cache-Control': 'public, max-age=3600',
+    ...(opts.filename ? { 'Content-Disposition': `inline; filename="${opts.filename}"` } : {}),
+  };
+  const range = (request.headers.get('Range') || '').match(/^bytes=(\d*)-(\d*)$/);
+  if (range && (range[1] || range[2])) {
+    let start = range[1] ? +range[1] : meta.size - +range[2];
+    let end = range[1] && range[2] ? Math.min(+range[2], meta.size - 1) : meta.size - 1;
+    if (start < 0) start = 0;
+    if (start > end || start >= meta.size) return new Response(null, { status: 416, headers: { 'Content-Range': `bytes */${meta.size}` } });
+    return new Response(request.method === 'HEAD' ? null : full.slice(start, end + 1), {
+      status: 206, headers: { ...headers, 'Content-Range': `bytes ${start}-${end}/${meta.size}`, 'Content-Length': String(end - start + 1) },
+    });
+  }
+  return new Response(request.method === 'HEAD' ? null : full, { headers: { ...headers, 'Content-Length': String(meta.size) } });
+}
+
+// Carte PDF : le fichier importé dans l'admin, sinon la carte d'origine du site
+function serveCarte(request, env) {
+  return serveFile(request, env, 'carte', {
+    filename: 'carte-saveurs-des-rois.pdf',
+    fallback: () => env.ASSETS.fetch(new Request(new URL('/assets/docs/carte-saveurs-des-rois.pdf', request.url), request)),
+  });
 }
 
 async function serveMedia(request, env, id) {
@@ -872,16 +959,17 @@ async function login(request, env) {
   if (!env.ADMIN_PASSWORD) {
     return json({ error: 'Mot de passe non configuré : Cloudflare → Workers & Pages → saveurs-des-rois → Settings → Variables and Secrets → ajouter le secret ADMIN_PASSWORD, puis redéployer.' }, 500);
   }
-  const { password } = await request.json().catch(() => ({}));
+  const { password, remember } = await request.json().catch(() => ({}));
   const ok = await safeEqual(String(password || ''), env.ADMIN_PASSWORD);
   if (!ok) {
     await new Promise(r => setTimeout(r, 900)); // ralentit les essais en série
     return json({ error: 'Mot de passe incorrect.' }, 401);
   }
-  const exp = Date.now() + SESSION_HOURS * 3600_000;
+  const hours = remember ? 24 * 30 : SESSION_HOURS; // « Rester connectée » : 30 jours sur cet appareil
+  const exp = Date.now() + hours * 3600_000;
   const token = `${exp}.${await hmac(String(exp), await sessionKey(env))}`;
   return json({ ok: true }, 200, {
-    'Set-Cookie': `${SESSION_COOKIE}=${token}; Path=/; Max-Age=${SESSION_HOURS * 3600}; HttpOnly; Secure; SameSite=Strict`,
+    'Set-Cookie': `${SESSION_COOKIE}=${token}; Path=/; Max-Age=${hours * 3600}; HttpOnly; Secure; SameSite=Strict`,
   });
 }
 

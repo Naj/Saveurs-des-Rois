@@ -7,7 +7,7 @@ const fail = msg => { console.error('✖ ' + msg); errors++; };
 const ok = msg => console.log('✔ ' + msg);
 const forWorkers = process.argv.includes('--workers');
 
-for (const f of ['public/_worker.js', 'public/js/app.js', 'public/js/catalogue-data.js', 'public/admin/admin.js', 'public/admin/devis.js', 'public/sw.js']) {
+for (const f of ['public/_worker.js', 'public/js/app.js', 'public/js/catalogue-data.js', 'public/admin/admin.js', 'public/admin/devis.js', 'public/sw.js', 'public/admin/sw.js', 'public/js/carte.js']) {
   try { execFileSync(process.execPath, ['--input-type=module', '--check'], { input: readFileSync(f), stdio: 'pipe' }); ok(`syntaxe ${f}`); }
   catch (e) { fail(`erreur de syntaxe dans ${f}\n${e.stderr}`); }
 }

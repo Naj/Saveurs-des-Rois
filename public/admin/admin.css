@@ -180,3 +180,16 @@ button.adm-alerte { border: 0; font: inherit; font-size: .95rem; cursor: pointer
 .adm-restore { display: flex; flex-wrap: wrap; gap: 0 .5rem; margin: .4rem 0 .8rem; }
 .adm-bar .adm-alerte + .adm-alerte { margin-left: .4rem; }
 .adm-item + .adm-item { margin-top: .9rem; }
+
+/* ================= Installation, musique, carte ================= */
+.adm-tete { display: flex; gap: .5rem; align-items: center; }
+.adm-tete [hidden] { display: none; }
+.adm-install { max-width: 30rem; }
+.adm-install img { border-radius: 16px; margin: .6rem 0; }
+.adm-musique audio { width: 100%; max-width: 30rem; margin: .3rem 0 .4rem; }
+.adm-musique audio[hidden] { display: none; }
+.adm-ko { color: var(--err) !important; }
+.adm-ok { color: var(--ok) !important; }
+.adm-mode--large { margin-bottom: .6rem; }
+.adm-mode--large small { font-size: .95rem; }
+@media (max-width: 600px) { .adm-tete .adm-out { padding: .3rem .6rem; font-size: .7rem; } }

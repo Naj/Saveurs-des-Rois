@@ -1,0 +1,22 @@
+{
+  "name": "Saveurs des Rois — Gestion",
+  "short_name": "SDR Gestion",
+  "description": "Administration du site Saveurs des Rois : demandes de devis, produits, avis, statistiques.",
+  "lang": "fr",
+  "id": "/admin/",
+  "start_url": "/admin/",
+  "scope": "/admin/",
+  "display": "standalone",
+  "background_color": "#f6f1e6",
+  "theme_color": "#050505",
+  "icons": [
+    { "src": "/assets/img/admin-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/assets/img/admin-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/assets/img/admin-icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Demandes de devis", "url": "/admin/#demandes", "icons": [{ "src": "/assets/img/admin-icon-192.png", "sizes": "192x192" }] },
+    { "name": "Produits", "url": "/admin/#produits", "icons": [{ "src": "/assets/img/admin-icon-192.png", "sizes": "192x192" }] },
+    { "name": "Statistiques", "url": "/admin/#stats", "icons": [{ "src": "/assets/img/admin-icon-192.png", "sizes": "192x192" }] }
+  ]
+}

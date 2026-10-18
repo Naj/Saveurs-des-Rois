@@ -1,0 +1,81 @@
+/* Carte Saveurs des Rois — écran et impression A4 */
+:root { --nuit: #050505; --or: #d6b55d; --or-clair: #ecd79a; --or-profond: #8c6b22; --ivoire: #fbf8f1; --amande: #dcc08f; --encre: #1e1812; --douce: #5b4f40;
+  --arch: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 140' preserveAspectRatio='none'%3E%3Cpath d='M0 140V58C0 30 22 18 40 10C46 7 49 3 50 0C51 3 54 7 60 10C78 18 100 30 100 58V140Z'/%3E%3C/svg%3E"); }
+* { box-sizing: border-box; }
+body { margin: 0; background: #e9e2d2; color: var(--encre); font: 400 11pt/1.5 "EB Garamond", Georgia, serif; }
+.chargement { text-align: center; padding: 4rem 1rem; }
+
+/* Barre d'outils (écran) */
+.outils { position: sticky; top: 0; z-index: 5; background: var(--nuit); color: #efe6d2; padding: .7rem 1rem; display: flex; flex-wrap: wrap; gap: .5rem 1.2rem; align-items: center; border-bottom: 1px solid var(--or); font-size: 15px; }
+.outils__retour { color: var(--or); text-decoration: none; }
+.outils__choix { display: flex; flex-wrap: wrap; gap: .3rem 1rem; flex: 1; }
+.outils__choix input { accent-color: var(--or); }
+.outils__aide { flex-basis: 100%; margin: 0; font-size: 13px; color: var(--amande); }
+.b { font: 600 13px "Cinzel", serif; letter-spacing: .04em; border-radius: 999px; padding: .55rem 1.1rem; cursor: pointer; border: 1px solid var(--or); }
+.b--or { background: var(--or); color: var(--nuit); }
+
+/* Pages A4 */
+.page { width: 210mm; min-height: 297mm; margin: 1.5rem auto; background: var(--ivoire); padding: 14mm 16mm 18mm; position: relative; box-shadow: 0 2px 18px rgba(0,0,0,.18); overflow: hidden; }
+.page::before { content: ""; position: absolute; inset: 6mm; border: 1px solid var(--amande); border-radius: 3mm; pointer-events: none; }
+.entete { display: flex; align-items: center; gap: 3mm; font: 600 10pt "Cinzel", serif; letter-spacing: .08em; color: var(--or-profond); margin-bottom: 6mm; }
+.entete img { width: 7mm; height: auto; }
+.titre-page { font: 600 22pt "Cinzel", serif; text-align: center; margin: 2mm 0 7mm; letter-spacing: .04em; }
+.pied { position: absolute; left: 16mm; right: 16mm; bottom: 9mm; text-align: center; font-size: 8.5pt; color: var(--douce); }
+.ar { font-family: "Amiri", serif; color: var(--or-profond); }
+.ar.grand { font-size: 20pt; margin: 0 0 1mm; text-align: left; }
+.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums lining-nums; }
+small { color: var(--douce); font-style: italic; }
+.note { font-size: 9.5pt; color: var(--douce); font-style: italic; text-align: center; margin-top: 6mm; }
+
+/* Couverture */
+.page--couv { background: var(--nuit); color: var(--ivoire); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.page--couv::before { border-color: rgba(214,181,93,.55); }
+.couv__logo { width: 82mm; height: auto; margin-bottom: 10mm; }
+.page--couv h1 { font: 600 34pt "Cinzel", serif; color: var(--or); letter-spacing: .14em; margin: 0 0 5mm; }
+.couv__sous { font-size: 14pt; font-style: italic; color: #efe6d2; margin: 0 0 12mm; }
+.couv__date { font: 500 10pt "Cinzel", serif; letter-spacing: .08em; color: var(--amande); }
+.couv__contact { position: absolute; bottom: 14mm; left: 0; right: 0; font-size: 10pt; color: var(--amande); }
+
+/* Tableau des tarifs */
+.tarifs { width: 100%; border-collapse: collapse; }
+.tarifs th { font: 600 8pt "Cinzel", serif; letter-spacing: .06em; text-transform: uppercase; color: var(--douce); text-align: left; border-bottom: 1.5px solid var(--or); padding: 2mm 1.5mm; }
+.tarifs th.num { text-align: right; }
+.tarifs td { border-bottom: 1px solid #e6d8bb; padding: 3mm 1.5mm; vertical-align: top; }
+.tarifs em { font-size: 9.5pt; color: var(--douce); }
+.tarifs .deg { font-size: 9.5pt; line-height: 1.45; }
+
+/* Fiche pâtisserie */
+.fiche { display: grid; grid-template-columns: 70mm 1fr; gap: 9mm; align-items: start; margin-bottom: 7mm; }
+.arche { aspect-ratio: 5 / 7; background: var(--or); padding: 1.2mm; -webkit-mask: var(--arch) center / 100% 100% no-repeat; mask: var(--arch) center / 100% 100% no-repeat; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.arche img { width: 100%; height: 100%; object-fit: cover; -webkit-mask: var(--arch) center / 100% 100% no-repeat; mask: var(--arch) center / 100% 100% no-repeat; display: block; }
+.fiche h2 { font: 600 24pt/1.1 "Cinzel", serif; margin: 2mm 0 1mm; }
+.accroche { font-style: italic; font-size: 13pt; color: var(--douce); margin: 0 0 3mm; }
+.desc p { margin: 0 0 2mm; }
+.prix { border-top: 1px solid var(--amande); border-bottom: 1px solid var(--amande); padding: 3mm 0; margin-top: 4mm; }
+.prix__grand { font: 600 17pt "Cinzel", serif; margin: 0 0 2mm; }
+.prix__grand small { font: italic 400 11pt "EB Garamond", serif; }
+.grille { border-collapse: collapse; min-width: 55mm; font-size: 10.5pt; }
+.grille td { padding: .8mm 2mm .8mm 0; border-bottom: 1px dotted #d9c79f; }
+.prix__pro { margin: 3mm 0 0; font-size: 10.5pt; }
+.prix__pro span { background: var(--nuit); color: var(--or); font: 600 7.5pt "Cinzel", serif; letter-spacing: .06em; padding: .4mm 2mm; border-radius: 99px; margin-right: 1.5mm; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.petit { font-size: 10pt; margin: 0; }
+.compo, .nutri { width: 100%; border-collapse: collapse; margin-bottom: 5mm; font-size: 10pt; background: #fff; }
+.compo th, .nutri th { font: 600 8pt "Cinzel", serif; letter-spacing: .06em; text-transform: uppercase; background: #f3ead6; color: var(--encre); border: 1px solid #e3d5b5; padding: 1.8mm 2.5mm; text-align: left; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.compo td, .nutri td { border: 1px solid #e3d5b5; padding: 2.5mm; vertical-align: top; }
+.compo td:first-child { width: 62%; }
+.nutri caption { font: 600 8.5pt "Cinzel", serif; letter-spacing: .06em; color: var(--or-profond); text-align: left; padding-bottom: 1.5mm; }
+.nutri td, .nutri th { text-align: center; }
+
+@media screen and (max-width: 820px) {
+  .page { width: auto; min-height: 0; margin: .8rem; padding: 10mm 7mm 20mm; }
+  .fiche { grid-template-columns: 1fr; }
+  .fiche__photo { max-width: 60mm; margin: 0 auto; }
+}
+
+@page { size: A4; margin: 0; }
+@media print {
+  body { background: #fff; }
+  .outils { display: none; }
+  .page { margin: 0; box-shadow: none; break-after: page; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .page:last-child { break-after: auto; }
+}

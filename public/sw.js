@@ -3,7 +3,7 @@
    - Pages et catalogue : réseau d'abord, copie locale si hors connexion.
    - Images et fichiers du site : servis depuis le cache, mis à jour en arrière-plan. */
 
-const VERSION = '2.9';
+const VERSION = '3.0';
 const CACHE = `sdr-${VERSION}`;
 const PRECACHE = [
   '/', '/index.html', '/404.html',
@@ -50,7 +50,7 @@ async function cacheDabord(request) {
 
 self.addEventListener('fetch', event => {
   const req = event.request;
-  if (req.method !== 'GET') return;
+  if (req.method !== 'GET' || req.headers.has('range')) return; // lecture audio (requêtes partielles) : directement au réseau
   const url = new URL(req.url);
 
   // Polices Google : en cache pour l'affichage hors connexion
@@ -62,8 +62,9 @@ self.addEventListener('fetch', event => {
 
   // Jamais de cache pour l'administration, les devis et le suivi d'audience
   if (url.pathname.startsWith('/admin') || url.pathname.startsWith('/api/admin') || url.pathname === '/api/track') return;
+  if (url.pathname.startsWith('/media/fichier/') || url.pathname === '/carte.pdf') return; // musique et carte : toujours la dernière version
 
-  if (req.mode === 'navigate') { event.respondWith(reseauDabord(req, '/')); return; }
+  if (req.mode === 'navigate') { event.respondWith(reseauDabord(req)); return; } // chaque page sous sa propre adresse, accueil en secours
   if (url.pathname === '/api/catalogue') { event.respondWith(reseauDabord(req)); return; }
   if (url.pathname.startsWith('/api/')) return;
 

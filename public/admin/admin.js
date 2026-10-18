@@ -30,7 +30,7 @@ function showLogin() { $('#login').hidden = false; $('#dash').hidden = true; $('
 $('#loginForm').addEventListener('submit', async e => {
   e.preventDefault();
   const msg = $('#loginMsg'); msg.hidden = true;
-  try { await api('/api/admin/login', { method: 'POST', body: { password: $('#pw').value } }); $('#pw').value = ''; start(); }
+  try { await api('/api/admin/login', { method: 'POST', body: { password: $('#pw').value, remember: $('#remember').checked } }); $('#pw').value = ''; start(); }
   catch (err) { msg.textContent = err.message; msg.hidden = false; }
 });
 $('#logout').addEventListener('click', async () => { await api('/api/admin/logout', { method: 'POST' }).catch(() => {}); showLogin(); });
@@ -41,6 +41,10 @@ async function start() {
     Object.assign(st, o, { requests: r.requests, reviews: a.reviews });
   } catch { return showLogin(); }
   $('#login').hidden = true; $('#dash').hidden = false; $('#logout').hidden = false;
+  const onglet = location.hash.slice(1); // raccourcis de l'application : /admin/#produits…
+  if (onglet && document.querySelector(`[data-tab="${CSS.escape(onglet)}"]`)) {
+    st.tab = onglet; document.querySelectorAll('[data-tab]').forEach(x => x.setAttribute('aria-selected', x.dataset.tab === onglet));
+  }
   countNew(); render();
 }
 function countNew() {
@@ -56,9 +60,11 @@ document.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click',
 }));
 
 function render() {
-  const fn = { sauvegarde: tSauvegarde, alertes: tAlertes, demandes: tDemandes, produits: tProduits, galerie: tGalerie, avis: tAvis, stats: tStats, textes: tTextes, videos: tVideos, medias: tMedias }[st.tab];
+  const fn = { carte: tCarte, sauvegarde: tSauvegarde, alertes: tAlertes, demandes: tDemandes, produits: tProduits, galerie: tGalerie, avis: tAvis, stats: tStats, textes: tTextes, videos: tVideos, medias: tMedias }[st.tab];
   $('#panel').innerHTML = fn();
   if (st.tab === 'medias') loadMedia();
+  if (st.tab === 'textes') { majMusique(); if (!st.files) chargerFichiers().then(majMusique); }
+  if (st.tab === 'carte' && !st.files) chargerFichiers().then(render);
   if (st.tab === 'stats') loadStats().catch(e => { $('#statsZone').innerHTML = `<p class="message message--err">${esc(e.message)}</p>`; });
   if (st.tab === 'produits') { refreshProdHelpers(); majGrille($('#prodForm')); }
 }
@@ -72,7 +78,7 @@ function demandeAvisLien(r) {
   return [tel && `<a href="https://wa.me/${tel}?text=${encodeURIComponent(texte)}" target="_blank" rel="noopener">Demander un avis (WhatsApp)</a>`,
     r.email && `<a href="mailto:${esc(r.email)}?subject=${encodeURIComponent('Votre avis compte pour nous')}&body=${encodeURIComponent(texte)}">Demander un avis (e-mail)</a>`].filter(Boolean).join('');
 }
-const ADMIN_VERSION = '2.9';
+const ADMIN_VERSION = '3.0';
 function alertBanner() {
   if (!st.version) return `<button class="adm-alerte adm-alerte--warn" data-goto="alertes">⚠️ Serveur du site pas à jour — voir l’onglet Alertes</button>`;
   const a = st.alerts || {};
@@ -559,13 +565,102 @@ async function loadStats() {
     <p class="note">Astuce : pour savoir quelles publications Instagram ou WhatsApp vous amènent des visiteurs, partagez le lien du site en ajoutant <code>?utm_source=instagram</code> (ou <code>whatsapp</code>, <code>facebook</code>…) à la fin de l’adresse.</p>`;
 }
 
+/* ---------------- Fichiers (musique, carte) */
+async function envoyerFichier(id, file) {
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
+  const type = file.type || { mp3: 'audio/mpeg', m4a: 'audio/mp4', aac: 'audio/aac', ogg: 'audio/ogg', wav: 'audio/wav', pdf: 'application/pdf' }[ext] || 'application/octet-stream';
+  const r = await fetch(`/api/admin/files/${id}`, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': type, 'X-Filename': encodeURIComponent(file.name) }, body: file });
+  const d = await r.json().catch(() => ({}));
+  if (r.status === 401) { showLogin(); throw new Error('Session expirée.'); }
+  if (!r.ok) throw new Error(d.error || `Erreur ${r.status}`);
+  return d;
+}
+const taille = n => n > 1e6 ? `${(n / 1e6).toFixed(1).replace('.', ',')} Mo` : `${Math.round(n / 1000)} ko`;
+async function chargerFichiers() { try { st.files = (await api('/api/admin/files')).files; } catch { st.files = {}; } }
+
+/* ---------------- Musique d'ambiance : diagnostic du lien */
+function lienAudio(u) {
+  u = String(u || '').trim();
+  if (!u) return { url: '' };
+  if (/youtu\.?be|youtube\.com/i.test(u)) return { url: '', err: 'Un lien YouTube ne peut pas servir de musique de fond : un site ne peut lire que des fichiers audio, et YouTube l’interdit. Importez plutôt le fichier MP3 ou M4A avec le bouton ci-dessus.' };
+  if (/spotify\.com|deezer\.com|music\.apple\.com|soundcloud\.com|music\.amazon/i.test(u)) return { url: '', err: 'Un lien Spotify, Deezer, Apple Music ou SoundCloud n’est pas un fichier audio : il ne peut pas être lu par le site. Importez le fichier MP3 ou M4A avec le bouton ci-dessus.' };
+  let m;
+  if ((m = u.match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?(?:.*&)?id=)([\w-]{10,})/))) return { url: `https://drive.google.com/uc?export=download&id=${m[1]}`, info: 'Lien Google Drive converti en lien direct. Le fichier doit être partagé avec « Tous les utilisateurs disposant du lien ». Google bloque parfois la lecture : en cas d’échec, importez le fichier.' };
+  if (/dropbox\.com/i.test(u)) { try { const x = new URL(u); x.searchParams.delete('dl'); x.searchParams.set('raw', '1'); return { url: x.toString(), info: 'Lien Dropbox converti en lien direct.' }; } catch { } }
+  if (/^http:\/\//i.test(u)) return { url: '', err: 'Le lien doit commencer par https:// (les liens http ne sont pas lus sur un site sécurisé).' };
+  if (u.startsWith('/media/fichier/musique')) { const f = st.files?.musique; return { url: u, info: f ? `Fichier importé : ${f.name} (${taille(f.size)}).` : 'Fichier importé.' }; }
+  return { url: u, info: /\.(mp3|m4a|aac|ogg|wav)(\?|$)/i.test(u) ? '' : 'Ce lien ne se termine pas par .mp3 ou .m4a : vérifiez avec le lecteur qu’il s’agit bien d’un fichier audio.' };
+}
+function majMusique() {
+  const input = $('#s-music_url'); if (!input) return;
+  const l = lienAudio(input.value), diag = $('#musicDiag'), audio = $('#musicTest');
+  diag.className = 'note ' + (l.err ? 'adm-ko' : '');
+  diag.textContent = l.err || l.info || (l.url ? 'Testez la lecture avec le lecteur ci-dessous.' : 'Aucune musique : le bouton « Ambiance » n’apparaît pas sur le site.');
+  audio.hidden = !l.url;
+  if (l.url && audio.dataset.src !== l.url) {
+    audio.dataset.src = l.url;
+    audio.onerror = () => {
+      diag.className = 'note adm-ko';
+      diag.textContent = l.url.startsWith('/media/fichier/')
+        ? 'Votre fichier est bien importé, mais ce navigateur ne parvient pas à le lire. Le format MP3 est lu par tous les navigateurs : convertissez le fichier en MP3 si besoin.'
+        : 'Ce lien ne mène pas à un fichier audio lisible. Importez le fichier MP3 ou M4A avec le bouton ci-dessus.';
+    };
+    audio.onloadedmetadata = () => { if (!l.err) { diag.className = 'note adm-ok'; diag.textContent = `${l.info ? l.info + ' ' : ''}✓ Lecture possible (${Math.floor(audio.duration / 60)} min ${String(Math.round(audio.duration % 60)).padStart(2, '0')}). ${l.url.startsWith('/media/fichier/') ? 'La musique est active sur le site.' : 'Pensez à enregistrer les textes.'}`; } };
+    audio.preload = 'metadata'; audio.src = l.url;
+  }
+  if (!l.url) { audio.removeAttribute('src'); audio.dataset.src = ''; }
+}
+function blocMusique(s) {
+  return `<div class="champ adm-musique">
+    <span>Musique d’ambiance (facultatif)</span>
+    <div class="adm-actions" style="margin-top:0">
+      <label class="btn btn--sombre btn--petit adm-upload">Importer un fichier audio (MP3, M4A)<input type="file" accept="audio/*,.mp3,.m4a,.aac,.ogg,.wav" id="musicUpload" hidden></label>
+      <button type="button" class="lien" id="musicClear">Retirer la musique</button>
+    </div>
+    <label for="s-music_url" class="aide" style="margin-top:.4rem">…ou lien direct vers un fichier audio</label>
+    <input id="s-music_url" name="music_url" value="${esc(s.music_url || '')}" placeholder="https://…/musique.mp3">
+    <p id="musicDiag" class="note"></p>
+    <audio id="musicTest" controls preload="metadata" hidden></audio>
+    <p class="note" style="margin:0">Uniquement une musique libre de droits ou dont vous avez la licence (SACEM) : un site professionnel ne peut pas diffuser un titre du commerce sans autorisation.</p>
+  </div>`;
+}
+
+/* ---------------- Carte PDF */
+function tCarte() {
+  const f = st.files?.carte, auto = st.settings.carte_mode === 'auto';
+  return `<h1>Carte PDF</h1>
+  <p>Le lien « Télécharger la carte » du site (pied de page et collection) mène à la carte choisie ci-dessous.</p>
+  <section class="adm-item">
+    <h2 style="font-size:1.1rem;margin-top:0">Carte proposée aux visiteurs</h2>
+    <label class="adm-mode adm-mode--large"><input type="radio" name="carte_mode" value="auto" ${auto ? 'checked' : ''}><span><strong>Carte générée depuis vos fiches</strong><small>Toujours à jour : prix, grilles dégressives, ingrédients et allergènes sont repris des fiches Produits. Rien à refaire quand un prix change.</small></span></label>
+    <label class="adm-mode adm-mode--large"><input type="radio" name="carte_mode" value="fichier" ${auto ? '' : 'checked'}><span><strong>Mon fichier PDF</strong><small>${f ? `Fichier importé : ${esc(f.name)} (${taille(f.size)}), le ${new Date(f.updated_at.replace(' ', 'T') + 'Z').toLocaleDateString('fr-FR')}.` : 'Actuellement : la carte d’origine fournie avec le site (vos fiches Canva).'}</small></span></label>
+  </section>
+  <div class="adm-stats-grid">
+    <section class="adm-item">
+      <h2 style="font-size:1.1rem;margin-top:0">Carte générée</h2>
+      <p class="note">Couverture, tableau des tarifs et une page par pâtisserie, à vos couleurs. Vous pouvez aussi l’enregistrer en PDF pour l’envoyer ou l’imprimer.</p>
+      <a class="btn btn--sombre btn--petit" href="/carte.html" target="_blank" rel="noopener">Ouvrir la carte générée</a>
+    </section>
+    <section class="adm-item">
+      <h2 style="font-size:1.1rem;margin-top:0">Mon fichier PDF</h2>
+      <p class="note">Créé avec Canva, Word… ou la carte générée enregistrée en PDF. 25 Mo maximum.</p>
+      <div class="adm-actions">
+        <label class="btn btn--sombre btn--petit adm-upload">${f ? 'Remplacer le PDF…' : 'Importer un PDF…'}<input type="file" accept="application/pdf,.pdf" id="carteUpload" hidden></label>
+        <a href="/carte.pdf?t=${Date.now()}" target="_blank" rel="noopener">Voir le PDF actuel</a>
+        ${f ? '<button type="button" class="lien" id="carteOrigine" style="color:var(--err)">Revenir à la carte d’origine</button>' : ''}
+      </div>
+      <p class="note" id="carteMsg"></p>
+    </section>
+  </div>`;
+}
+
 /* ---------------- Textes & contact */
 const TEXT_FIELDS = [
   ['Accueil', [['hero_title', 'Titre (référencement Google)'], ['hero_text', 'Phrase d’accueil', 2], ['quote_note', 'Note sur les devis et prix dégressifs', 2]]],
   ['Notre histoire', [['story_title', 'Titre'], ['story_body', 'Votre histoire (une ligne vide = nouveau paragraphe)', 12], ['story_image', 'Photo', 0, 'pick']]],
   ['Contact', [['contact_phone', 'Téléphone'], ['contact_whatsapp', 'WhatsApp (numéro au format international, ex : 33612345678)'], ['contact_email', 'E-mail'], ['contact_instagram', 'Instagram (@compte ou lien)'], ['contact_tiktok', 'TikTok (@compte ou lien)'], ['contact_facebook', 'Facebook (page ou lien)'], ['contact_zone', 'Zone de retrait / livraison'], ['contact_hours', 'Disponibilités']]],
   ['Devis PDF (non affiché sur le site)', [['company_name', 'Nom commercial (ex : Saveurs des Rois)'], ['company_owner', 'Nom et prénom de l’entrepreneur'], ['company_siret', 'SIRET'], ['company_address', 'Adresse', 2], ['company_phone', 'Téléphone sur le devis (vide = celui du contact)'], ['company_email', 'E-mail sur le devis (vide = celui du contact)'], ['quote_validity', 'Validité du devis en jours (ex : 30)'], ['quote_payment', 'Conditions de règlement (ex : Acompte de 30 % à la commande, solde au retrait)', 2], ['quote_legal', 'Mention fiscale', 2], ['quote_footer', 'Message de fin (facultatif)', 2]]],
-  ['Ambiance & mentions', [['music_url', 'Lien d’une musique d’ambiance (facultatif, libre de droits)'], ['legal_text', 'Mentions légales', 10]]],
+  ['Ambiance & mentions', [['music_url', '', 0, 'music'], ['legal_text', 'Mentions légales', 10]]],
 ];
 function tTextes() {
   const s = st.settings;
@@ -573,7 +668,7 @@ function tTextes() {
   <p class="note">Un champ de contact laissé vide n’apparaît pas sur le site.</p>
   <form id="textForm">
     ${TEXT_FIELDS.map(([leg, fields]) => `<fieldset class="adm-fieldset"><legend>${leg}</legend>
-      ${fields.map(([k, label, rows, kind]) => kind === 'pick'
+      ${fields.map(([k, label, rows, kind]) => kind === 'music' ? blocMusique(s) : kind === 'pick'
         ? `<div class="champ"><span>${label}</span><div class="adm-img"><img id="s-${k}-prev" src="${esc(s[k] || '')}" alt=""><input type="hidden" name="${k}" value="${esc(s[k] || '')}"><button type="button" class="btn btn--ligne btn--petit" data-pick="setting:${k}">Changer la photo</button></div></div>`
         : `<div class="champ"><label for="s-${k}">${label}</label>${rows ? `<textarea id="s-${k}" name="${k}" rows="${rows}">${esc(s[k] || '')}</textarea>` : `<input id="s-${k}" name="${k}" value="${esc(s[k] || '')}">`}</div>`).join('')}
     </fieldset>`).join('')}
@@ -671,6 +766,21 @@ panel.addEventListener('change', e => {
     await api(`/api/admin/requests/${id}`, { method: 'PUT', body: { status: e.target.value } });
     st.requests.find(r => r.id === id).status = e.target.value; countNew(); render();
   }, 'Statut mis à jour.');
+  if (e.target.name === 'carte_mode') run(async () => {
+    await api('/api/admin/settings', { method: 'PUT', body: { carte_mode: e.target.value } });
+    st.settings.carte_mode = e.target.value;
+  }, e.target.value === 'auto' ? 'Le site propose maintenant la carte générée depuis vos fiches.' : 'Le site propose maintenant votre fichier PDF.');
+  if (e.target.id === 'carteUpload' && e.target.files[0]) run(async () => {
+    $('#carteMsg').textContent = 'Envoi en cours…';
+    await envoyerFichier('carte', e.target.files[0]);
+    st.settings.carte_mode = 'fichier'; await chargerFichiers(); render();
+  }, 'Carte PDF importée : le site propose maintenant ce fichier.');
+  if (e.target.id === 'musicUpload' && e.target.files[0]) run(async () => {
+    $('#musicDiag').textContent = 'Envoi en cours…';
+    const r = await envoyerFichier('musique', e.target.files[0]);
+    st.settings.music_url = r.url; await chargerFichiers();
+    $('#s-music_url').value = r.url; majMusique();
+  }, 'Musique importée et enregistrée.');
   if (e.target.id === 'restoreFile') {
     const f = e.target.files[0]; if (!f) return;
     const only = [...panel.querySelectorAll('[name=only]:checked')].map(x => x.value);
@@ -697,6 +807,7 @@ panel.addEventListener('change', e => {
 });
 panel.addEventListener('input', e => {
   if (e.target.name === 'price_mode') $('#prixBloc').dataset.mode = e.target.value;
+  if (e.target.id === 's-music_url') majMusique();
   if (e.target.closest('#prodForm')) { refreshProdHelpers(); majGrille(e.target.form); }
 });
 
@@ -736,6 +847,14 @@ panel.addEventListener('click', e => {
     await api(`/api/admin/gallery/${t.dataset.delgalerie}`, { method: 'DELETE' });
     st.gallery = st.gallery.filter(g => g.id !== +t.dataset.delgalerie); render();
   }, 'Photo retirée.');
+  if (t.id === 'musicClear') return run(async () => {
+    if (st.files?.musique) await api('/api/admin/files/musique', { method: 'DELETE' });
+    await api('/api/admin/settings', { method: 'PUT', body: { music_url: '' } });
+    st.settings.music_url = ''; await chargerFichiers(); $('#s-music_url').value = ''; majMusique();
+  }, 'Musique retirée du site.');
+  if (t.id === 'carteOrigine' && confirm('Supprimer votre PDF importé et revenir à la carte d’origine ?')) return run(async () => {
+    await api('/api/admin/files/carte', { method: 'DELETE' }); await chargerFichiers(); render();
+  }, 'Carte d’origine rétablie.');
   if (t.closest('[data-backup]')) { try { localStorage.setItem(LAST_BACKUP, new Date().toISOString()); } catch { } setTimeout(render, 1500); }
   const go = t.closest('[data-goto]');
   if (go) { document.querySelector(`[data-tab="${go.dataset.goto}"]`).click(); return; }
@@ -800,6 +919,19 @@ panel.addEventListener('submit', e => {
     await api(id ? `/api/admin/videos/${id}` : '/api/admin/videos', { method: id ? 'PUT' : 'POST', body: data });
     st.videos = (await api('/api/admin/overview')).videos; render();
   }, 'Vidéo enregistrée.');
+});
+
+/* ---------------- Application installable (administration) */
+let inviteAdmin = null;
+const estIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const estInstallee = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/admin/sw.js', { scope: '/admin/' }).catch(() => {});
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); inviteAdmin = e; $('#installAdmin').hidden = false; });
+window.addEventListener('appinstalled', () => { inviteAdmin = null; $('#installAdmin').hidden = true; toast('Administration installée ✓'); });
+if (estIOS() && !estInstallee()) $('#installAdmin').hidden = false;
+$('#installAdmin').addEventListener('click', () => {
+  if (inviteAdmin) { inviteAdmin.prompt(); inviteAdmin = null; $('#installAdmin').hidden = true; return; }
+  $('#installAide').showModal();
 });
 
 start();
