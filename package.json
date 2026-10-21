@@ -2,7 +2,7 @@
   "name": "saveurs-des-rois",
   "version": "2.0.0",
   "private": true,
-  "description": "Site vitrine Saveurs des Rois — pâtisseries orientales artisanales",
+  "description": "Site vitrine Saveurs des Rois — pâtisseries marocaines artisanales",
   "engines": { "node": ">=20" },
   "scripts": {
     "check": "node scripts/check.mjs",

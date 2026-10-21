@@ -322,7 +322,10 @@ function pageCollection() {
   <section class="section" style="padding-top:1.5rem">
     <div class="wrap">
       <div class="grille">${state.products.map(carte).join('')}</div>
-      <p class="centre note" style="margin-top:3rem">Envie de tout avoir sous la main ? <a ${carteAttrs()}>Télécharger la carte (PDF)</a></p>
+      <div class="carte-dl">
+        <p>Envie de tout avoir sous la main ?</p>
+        <a class="btn btn--sombre" ${carteAttrs()}>Télécharger la carte (PDF)</a>
+      </div>
     </div>
   </section>`;
 }
@@ -580,7 +583,7 @@ function route() {
   document.querySelectorAll('[data-nav]').forEach(a => a.toggleAttribute('aria-current', a.dataset.nav === (page === 'p' ? 'collection' : page === 'avis' ? 'evenements' : page)));
   document.querySelectorAll('[data-nav][aria-current]').forEach(a => a.setAttribute('aria-current', 'page'));
   const p = page === 'p' ? byId(arg) : null;
-  document.title = p ? `${p.name} — Saveurs des Rois` : 'Saveurs des Rois — Pâtisseries orientales artisanales';
+  document.title = p ? `${p.name} — Saveurs des Rois` : 'Saveurs des Rois — Pâtisseries marocaines artisanales';
   closeNav();
   window.scrollTo(0, 0);
   if (page) main.focus({ preventScroll: true });
@@ -728,6 +731,7 @@ function carteAttrs() {
 }
 
 function footer() {
+  document.querySelectorAll('[data-carte-nav]').forEach(a => { a.outerHTML = `<a data-carte-nav ${carteAttrs()}>La carte</a>`; });
   const c = document.querySelector('[data-carte]');
   if (c) c.outerHTML = `<a data-carte ${carteAttrs()}>Télécharger la carte (PDF)</a>`;
   document.getElementById('year').textContent = new Date().getFullYear();

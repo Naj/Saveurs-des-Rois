@@ -263,6 +263,7 @@ Admin → **Textes & contact** → *Musique d'ambiance* → **Importer un fichie
 
 Admin → **Carte PDF** : choisissez ce que propose le lien « Télécharger la carte » du site.
 - **Carte générée depuis vos fiches** : couverture, tableau des tarifs et une page par pâtisserie (photo, prix, grille dégressive, prix pros, ingrédients, allergènes, valeurs nutritionnelles). **Toujours à jour** : rien à refaire quand vous changez un prix. Bouton *Ouvrir la carte générée* pour l'enregistrer en PDF et l'envoyer.
+- **Carte professionnels** : dans la carte générée, menu *Tarifs* → *Professionnels seulement* : uniquement les prix au kilo et pour 100 g, sans prix à la pièce. Lien direct à envoyer à vos pros : `…/carte.html?tarifs=pro`.
 - **Mon fichier PDF** : importez votre propre carte (Canva, Word…, 25 Mo maximum) ; *Revenir à la carte d'origine* rétablit celle fournie avec le site.
 
 ---

@@ -4,14 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>La carte — Saveurs des Rois</title>
-  <meta name="description" content="La carte des pâtisseries orientales Saveurs des Rois : tarifs, ingrédients, allergènes et valeurs nutritionnelles.">
+  <meta name="description" content="La carte des pâtisseries marocaines Saveurs des Rois : tarifs, ingrédients, allergènes et valeurs nutritionnelles.">
   <meta name="theme-color" content="#050505">
   <link rel="icon" type="image/png" href="/assets/img/favicon.png">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Cinzel:wght@500;600;700&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/carte.css?v=3.0">
+  <link rel="stylesheet" href="/css/carte.css?v=3.1">
 </head>
 <body>
   <div class="outils" id="outils">
@@ -20,13 +20,19 @@
       <label><input type="checkbox" data-opt="couverture" checked> Couverture</label>
       <label><input type="checkbox" data-opt="tarifs" checked> Tableau des tarifs</label>
       <label><input type="checkbox" data-opt="fiches" checked> Une page par pâtisserie</label>
-      <label><input type="checkbox" data-opt="pro" checked> Prix professionnels</label>
+      <label class="outils__tarifs">Tarifs :
+        <select id="public">
+          <option value="tous">Particuliers et professionnels</option>
+          <option value="part">Particuliers seulement (à la pièce)</option>
+          <option value="pro">Professionnels seulement (kilo et 100 g)</option>
+        </select>
+      </label>
     </div>
     <button class="b b--or" id="imprimer" type="button">Télécharger en PDF</button>
     <p class="outils__aide">Cette carte est générée à partir des fiches du site : elle est toujours à jour. « Télécharger en PDF » ouvre l’impression : choisissez <strong>Enregistrer au format PDF</strong>.</p>
   </div>
   <main id="carte"><p class="chargement">Chargement de la carte…</p></main>
-  <script src="/js/catalogue-data.js?v=3.0"></script>
-  <script src="/js/carte.js?v=3.0"></script>
+  <script src="/js/catalogue-data.js?v=3.1"></script>
+  <script src="/js/carte.js?v=3.1"></script>
 </body>
 </html>

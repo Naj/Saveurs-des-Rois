@@ -7,7 +7,13 @@
   const paras = t => esc(t).split(/\n{2,}/).map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('');
   const mode = p => p.price_mode || 'piece';
   const paliers = p => (Array.isArray(p.tiers) ? p.tiers : []).filter(t => t.min >= 2 && t.price_cents > 0 && t.price_cents < p.price_cents).sort((a, b) => a.min - b.min);
-  const opts = { couverture: true, tarifs: true, fiches: true, pro: true };
+  // Public visé : tous, particuliers (à la pièce) ou professionnels (au kilo et aux 100 g). Lien direct : /carte.html?tarifs=pro
+  const demande = new URLSearchParams(location.search).get('tarifs');
+  const opts = { couverture: true, tarifs: true, fiches: true, public: ['part', 'pro'].includes(demande) ? demande : 'tous' };
+  const proSeul = () => opts.public === 'pro';
+  const avecPro = () => opts.public !== 'part';
+  const aKg = p => ['kg', 'both'].includes(mode(p)) && p.price_kg_cents > 0;
+  const cent = p => Math.round(p.price_kg_cents / 10); // prix pour 100 g
   let D;
 
   function prixPiece(p) {
@@ -28,14 +34,33 @@
     return `<section class="page page--couv">
       <img src="/assets/img/logo-transparent.webp" alt="Saveurs des Rois" class="couv__logo">
       <h1>La Carte</h1>
-      <p class="couv__sous">Pâtisseries orientales artisanales<br>Faites maison, avec passion et authenticité</p>
+      <p class="couv__sous">Pâtisseries marocaines artisanales<br>Faites maison, avec passion et authenticité</p>
+      ${proSeul() ? '<p class="couv__pro">Tarifs professionnels · vente au poids</p>' : ''}
       <p class="couv__date">Tarifs en vigueur au ${date}</p>
       ${contacts.length ? `<p class="couv__contact">${contacts.map(esc).join(' · ')}</p>` : ''}
     </section>`;
   }
 
+  function tableauPro(produits, s) {
+    return `<section class="page">
+      <header class="entete"><img src="/assets/img/logo-mark.webp" alt=""><span>Saveurs des Rois</span></header>
+      <h2 class="titre-page">Tarifs professionnels</h2>
+      <table class="tarifs">
+        <thead><tr><th>Pâtisserie</th><th class="num">Prix au kilo</th><th class="num">Prix pour 100 g</th></tr></thead>
+        <tbody>${produits.map(p => `<tr>
+          <td><strong>${esc(p.name)}</strong>${p.arabic_name ? ` <span class="ar" lang="ar" dir="rtl">${esc(p.arabic_name)}</span>` : ''}${p.tagline ? `<br><em>${esc(p.tagline)}</em>` : ''}</td>
+          <td class="num"><strong>${euro(p.price_kg_cents)}</strong> <small>le kg</small></td>
+          <td class="num">${euro(cent(p))} <small>les 100 g</small></td>
+        </tr>`).join('')}</tbody>
+      </table>
+      <p class="note">Vente au poids réservée aux professionnels, par tranche de 100 g. Prix fixes, sans tarif dégressif. Devis gratuit.</p>
+      ${pied(s)}
+    </section>`;
+  }
+
   function tableauTarifs(produits, s) {
-    const pro = opts.pro && produits.some(p => prixPro(p));
+    if (proSeul()) return tableauPro(produits, s);
+    const pro = avecPro() && produits.some(p => prixPro(p));
     const deg = produits.some(p => degressif(p));
     return `<section class="page">
       <header class="entete"><img src="/assets/img/logo-mark.webp" alt=""><span>Saveurs des Rois</span></header>
@@ -66,12 +91,17 @@
           ${p.arabic_name ? `<p class="ar grand" lang="ar" dir="rtl">${esc(p.arabic_name)}</p>` : ''}
           ${p.tagline ? `<p class="accroche">${esc(p.tagline)}</p>` : ''}
           ${p.description ? `<div class="desc">${paras(p.description)}</div>` : ''}
-          <div class="prix">
+          ${proSeul() ? `<div class="prix">
+            <p class="prix__pro"><span>Professionnels</span> vente au poids</p>
+            <p class="prix__grand">${euro(p.price_kg_cents)} <small>le kg</small></p>
+            <p class="prix__cent">soit <strong>${euro(cent(p))}</strong> les 100 g</p>
+            <p class="petit">Par tranche de 100 g · prix fixe, sans tarif dégressif</p>
+          </div>` : `<div class="prix">
             ${mode(p) === 'devis' ? '<p class="prix__grand">Prix sur devis</p>' : ''}
             ${['piece', 'both'].includes(mode(p)) ? `<p class="prix__grand">${euro(p.price_cents)} <small>${esc(p.price_label || 'la pièce')}</small></p>
               ${t.length ? `<table class="grille"><tbody>${t.map(x => `<tr><td>Dès ${x.min} pièces</td><td class="num">${euro(x.price_cents)}</td></tr>`).join('')}</tbody></table>` : p.threshold ? `<p class="petit">Prix dégressif à partir de ${p.threshold} pièces</p>` : ''}` : ''}
-            ${opts.pro && prixPro(p) ? `<p class="prix__pro"><span>Professionnels</span> ${prixPro(p)} · vente au poids</p>` : ''}
-          </div>
+            ${avecPro() && prixPro(p) ? `<p class="prix__pro"><span>Professionnels</span> ${prixPro(p)} · ${euro(cent(p))} les 100 g</p>` : ''}
+          </div>`}
         </div>
       </div>
       ${p.ingredients || p.allergens ? `<table class="compo">
@@ -89,20 +119,31 @@
 
   function pied(s) {
     const c = [s.contact_phone, s.contact_email, location.host].filter(Boolean);
-    return `<footer class="pied">Saveurs des Rois · Pâtisseries orientales artisanales${c.length ? ' · ' + c.map(esc).join(' · ') : ''} · Devis gratuit</footer>`;
+    return `<footer class="pied">Saveurs des Rois · Pâtisseries marocaines artisanales${c.length ? ' · ' + c.map(esc).join(' · ') : ''} · Devis gratuit</footer>`;
   }
 
   function rendu() {
     const s = D.settings || {};
-    const produits = (D.products || []).filter(p => p.visible !== 0);
+    const produits = (D.products || []).filter(p => p.visible !== 0)
+      .filter(p => proSeul() ? aKg(p) : opts.public === 'part' ? mode(p) !== 'kg' : true);
     const date = new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
     $('#carte').innerHTML = [
       opts.couverture && couverture(s, date),
       opts.tarifs && tableauTarifs(produits, s),
       ...(opts.fiches ? produits.map(p => fiche(p, s)) : []),
     ].filter(Boolean).join('') || '<p class="chargement">Cochez au moins un élément à inclure.</p>';
+    if (proSeul() && !produits.length) $('#carte').innerHTML = '<p class="chargement">Aucune pâtisserie n’a de prix au kilo. Renseignez-le dans l’admin (Produits → Prix → « Au kilo » ou « Les deux »).</p>';
+    document.title = `${proSeul() ? 'Tarifs professionnels' : 'La carte'} — Saveurs des Rois (${new Date().toLocaleDateString('fr-FR')})`;
   }
 
+  $('#public').value = opts.public;
+  $('#public').addEventListener('change', e => {
+    opts.public = e.target.value;
+    const u = new URL(location.href);
+    opts.public === 'tous' ? u.searchParams.delete('tarifs') : u.searchParams.set('tarifs', opts.public);
+    history.replaceState(null, '', u);
+    rendu();
+  });
   document.getElementById('choix').addEventListener('change', e => {
     const k = e.target.dataset.opt; if (!k) return;
     opts[k] = e.target.checked; rendu();
@@ -122,7 +163,6 @@
     } catch {
       D = window.SDR_FALLBACK || { products: [], settings: {} };
     }
-    document.title = `La carte — Saveurs des Rois (${new Date().toLocaleDateString('fr-FR')})`;
     rendu();
   })();
 })();

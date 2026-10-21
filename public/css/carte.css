@@ -79,3 +79,7 @@ small { color: var(--douce); font-style: italic; }
   .page { margin: 0; box-shadow: none; break-after: page; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .page:last-child { break-after: auto; }
 }
+.outils__tarifs select { font: inherit; font-size: 14px; padding: .25rem .5rem; border-radius: 6px; border: 1px solid var(--or); background: #14110c; color: #efe6d2; margin-left: .3rem; }
+.couv__pro { font: 600 11pt "Cinzel", serif; letter-spacing: .1em; color: var(--nuit); background: var(--or); padding: 1.5mm 5mm; border-radius: 99px; margin: 0 0 6mm; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.prix__cent { margin: -1mm 0 2mm; font-size: 12pt; }
+.prix .prix__pro:first-child { margin: 0 0 2mm; }

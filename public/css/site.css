@@ -410,3 +410,9 @@ table.nutri td { text-align: right; font-variant-numeric: tabular-nums lining-nu
 .appli .top { padding-top: max(var(--pad-t), 0px); }
 @media (max-width: 860px) { .nav__installer { margin-top: .8rem; padding: .7rem; } }
 .installer [hidden], .btn[hidden] { display: none; }
+
+/* ================= Téléchargement de la carte ================= */
+.carte-dl { text-align: center; margin-top: 3.5rem; padding: 2rem 1rem; border-top: 1px solid var(--amande); }
+.carte-dl p { font-size: clamp(1.2rem, 2.4vw, 1.45rem); font-style: italic; color: var(--encre-douce); margin: 0 0 1rem; }
+.carte-dl .btn { font-size: 1.02rem; min-height: 52px; padding: .7rem 2rem; }
+.foot a[data-carte] { font-size: 1.1rem; color: var(--or-clair); }

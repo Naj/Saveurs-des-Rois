@@ -78,7 +78,7 @@ function demandeAvisLien(r) {
   return [tel && `<a href="https://wa.me/${tel}?text=${encodeURIComponent(texte)}" target="_blank" rel="noopener">Demander un avis (WhatsApp)</a>`,
     r.email && `<a href="mailto:${esc(r.email)}?subject=${encodeURIComponent('Votre avis compte pour nous')}&body=${encodeURIComponent(texte)}">Demander un avis (e-mail)</a>`].filter(Boolean).join('');
 }
-const ADMIN_VERSION = '3.0';
+const ADMIN_VERSION = '3.1';
 function alertBanner() {
   if (!st.version) return `<button class="adm-alerte adm-alerte--warn" data-goto="alertes">⚠️ Serveur du site pas à jour — voir l’onglet Alertes</button>`;
   const a = st.alerts || {};
@@ -639,7 +639,11 @@ function tCarte() {
     <section class="adm-item">
       <h2 style="font-size:1.1rem;margin-top:0">Carte générée</h2>
       <p class="note">Couverture, tableau des tarifs et une page par pâtisserie, à vos couleurs. Vous pouvez aussi l’enregistrer en PDF pour l’envoyer ou l’imprimer.</p>
-      <a class="btn btn--sombre btn--petit" href="/carte.html" target="_blank" rel="noopener">Ouvrir la carte générée</a>
+      <div class="adm-actions">
+        <a class="btn btn--sombre btn--petit" href="/carte.html" target="_blank" rel="noopener">Ouvrir la carte générée</a>
+        <a class="btn btn--ligne btn--petit" href="/carte.html?tarifs=pro" target="_blank" rel="noopener">Carte professionnels (kilo et 100 g)</a>
+      </div>
+      <p class="note">Lien à envoyer à vos clients professionnels : <code>${location.origin}/carte.html?tarifs=pro</code></p>
     </section>
     <section class="adm-item">
       <h2 style="font-size:1.1rem;margin-top:0">Mon fichier PDF</h2>

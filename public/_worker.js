@@ -11,7 +11,7 @@
 /* ============================== Base de données : structure et contenu initial ============================== */
 
 
-const SCHEMA_VERSION = '7';
+const SCHEMA_VERSION = '8';
 
 // Colonnes ajoutées après la première version (ajoutées une à une, sans rien effacer)
 const ADD_COLUMNS = [
@@ -73,7 +73,7 @@ const SEED = [
    "Cornes de Gazelle",
    "كعب الغزال",
    "L’Art de la Tradition",
-   "Plongez dans la douceur orientale avec nos Cornes de Gazelle, une alliance parfaite entre pâte fine parfumée à la fleur d’oranger et cœur fondant aux amandes. Ingrédients nobles, sans compromis sur la qualité. Fait maison, avec passion et authenticité.",
+   "Plongez dans la douceur marocaine avec nos Cornes de Gazelle, une alliance parfaite entre pâte fine parfumée à la fleur d’oranger et cœur fondant aux amandes. Ingrédients nobles, sans compromis sur la qualité. Fait maison, avec passion et authenticité.",
    80,
    "la pièce",
    12,
@@ -151,7 +151,7 @@ const SEED = [
    "Makrout",
    "مقروط",
    null,
-   "Le Makrout est une pâtisserie orientale emblématique, délicatement travaillée, parfumée à la fleur d’oranger, au beurre et aux épices. Son cœur tendre à la pâte de dattes s’allie parfaitement à l’arôme subtil de cannelle et au parfum du safran. Chaque pièce est ensuite dorée puis trempée dans un miel parfumé, lui donnant une brillance naturelle et une douceur incomparable.",
+   "Le Makrout est une pâtisserie marocaine emblématique, délicatement travaillée, parfumée à la fleur d’oranger, au beurre et aux épices. Son cœur tendre à la pâte de dattes s’allie parfaitement à l’arôme subtil de cannelle et au parfum du safran. Chaque pièce est ensuite dorée puis trempée dans un miel parfumé, lui donnant une brillance naturelle et une douceur incomparable.",
    150,
    "la pièce",
    6,
@@ -181,7 +181,7 @@ const SEED = [
   "sql": "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",
   "params": [
    "hero_text",
-   "Pâtisseries orientales artisanales, faites maison avec passion et authenticité."
+   "Pâtisseries marocaines artisanales, faites maison avec passion et authenticité."
   ]
  },
  {
@@ -312,7 +312,7 @@ const PUBLIC_SETTINGS = ['carte_mode',
   'contact_phone', 'contact_whatsapp', 'contact_email', 'contact_instagram', 'contact_facebook',
   'contact_tiktok', 'contact_zone', 'contact_hours', 'music_url', 'legal_text',
 ];
-const APP_VERSION = '3.0';
+const APP_VERSION = '3.1';
 // Colonnes restaurées depuis une sauvegarde (les colonnes inconnues sont ignorées)
 const RESTORE_COLUMNS = {
   products: ['id', 'name', 'arabic_name', 'tagline', 'description', 'price_cents', 'price_label', 'threshold', 'ingredients', 'allergens', 'traces',
@@ -371,6 +371,21 @@ async function initDb(env) {
   for (const sql of ADD_COLUMNS) await db.prepare(sql).run().catch(() => {}); // déjà présente : ignoré
   await db.batch(SEED.map(({ sql, params }) => db.prepare(sql).bind(...params)));
   await db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('schema_version', ?)").bind(SCHEMA_VERSION).run();
+  await migrations(db);
+}
+
+// Corrections de contenu appliquées une seule fois sur une base existante
+async function migrations(db) {
+  const fait = await db.prepare("SELECT value FROM settings WHERE key = 'migr_marocaine'").first();
+  if (!fait) {
+    // « orientale(s) » → « marocaine(s) » dans les textes du site et les fiches
+    const rep = col => `${col} = REPLACE(REPLACE(REPLACE(REPLACE(${col}, 'orientales', 'marocaines'), 'orientale', 'marocaine'), 'Orientales', 'Marocaines'), 'Orientale', 'Marocaine')`;
+    await db.batch([
+      db.prepare(`UPDATE settings SET ${rep('value')} WHERE value LIKE '%rientale%'`),
+      db.prepare(`UPDATE products SET ${['name', 'tagline', 'description', 'ingredients'].map(rep).join(', ')}`),
+      db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('migr_marocaine', '1')"),
+    ]);
+  }
 }
 
 /* ---------------------------------------------------------------- routes */

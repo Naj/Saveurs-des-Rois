@@ -113,7 +113,7 @@ function rendu() {
       <img src="/assets/img/logo-transparent.webp" alt="Saveurs des Rois">
       <div>
         <p class="marque__nom">${esc(S.company_name || 'Saveurs des Rois')}</p>
-        <p class="marque__info">Pâtisseries orientales artisanales</p>
+        <p class="marque__info">Pâtisseries marocaines artisanales</p>
         <p class="marque__info">${[S.company_owner, S.company_siret && `SIRET ${S.company_siret}`].filter(Boolean).map(esc).join(' · ')}</p>
         <p class="marque__info">${esc(S.company_address || '').replace(/\n/g, '<br>')}</p>
         <p class="marque__info">${[tel, mail].filter(Boolean).map(esc).join(' · ')}</p>
