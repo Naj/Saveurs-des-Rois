@@ -7,9 +7,8 @@
   const paras = t => esc(t).split(/\n{2,}/).map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('');
   const mode = p => p.price_mode || 'piece';
   const paliers = p => (Array.isArray(p.tiers) ? p.tiers : []).filter(t => t.min >= 2 && t.price_cents > 0 && t.price_cents < p.price_cents).sort((a, b) => a.min - b.min);
-  // Public visé : tous, particuliers (à la pièce) ou professionnels (au kilo et aux 100 g). Lien direct : /carte.html?tarifs=pro
-  const demande = new URLSearchParams(location.search).get('tarifs');
-  const opts = { couverture: true, tarifs: true, fiches: true, public: ['part', 'pro'].includes(demande) ? demande : 'tous' };
+  // Deux cartes distinctes : /carte.html (particuliers, prix à la pièce) et /carte-pro.html (professionnels, kilo et 100 g)
+  const opts = { couverture: true, tarifs: true, fiches: true, public: document.body.dataset.carte === 'pro' ? 'pro' : 'part' };
   const proSeul = () => opts.public === 'pro';
   const avecPro = () => opts.public !== 'part';
   const aKg = p => ['kg', 'both'].includes(mode(p)) && p.price_kg_cents > 0;
@@ -134,6 +133,7 @@
     ].filter(Boolean).join('') || '<p class="chargement">Cochez au moins un élément à inclure.</p>';
     if (proSeul() && !produits.length) {
       const reserve = (D.products || []).some(p => p.pro_dispo);
+      $('#imprimer').hidden = true; $('#choix').hidden = true;
       $('#carte').innerHTML = reserve
         ? '<div class="reserve"><img src="/assets/img/logo-transparent.webp" alt=""><h2>Tarifs réservés aux professionnels</h2><p>Les prix au kilo sont accessibles avec votre code d’accès professionnel.</p><a class="b b--or" href="/#/pro">Accéder à l’Espace pro</a></div>'
         : '<p class="chargement">Aucune pâtisserie n’a de prix au kilo. Renseignez-le dans l’admin (Produits → Prix → « Au kilo » ou « Les deux »).</p>';
@@ -141,19 +141,6 @@
     document.title = `${proSeul() ? 'Tarifs professionnels' : 'La carte'} — Saveurs des Rois (${new Date().toLocaleDateString('fr-FR')})`;
   }
 
-  $('#public').value = opts.public;
-  const majChoix = () => { // sans accès pro, seule la carte particuliers est proposée
-    const pro = (D?.products || []).some(p => p.price_kg_cents > 0);
-    $('#public').querySelectorAll('option:not([value="part"])').forEach(o => { o.hidden = !pro; o.disabled = !pro; });
-    if (!pro && opts.public === 'tous') { opts.public = 'part'; $('#public').value = 'part'; }
-  };
-  $('#public').addEventListener('change', e => {
-    opts.public = e.target.value;
-    const u = new URL(location.href);
-    opts.public === 'tous' ? u.searchParams.delete('tarifs') : u.searchParams.set('tarifs', opts.public);
-    history.replaceState(null, '', u);
-    rendu();
-  });
   document.getElementById('choix').addEventListener('change', e => {
     const k = e.target.dataset.opt; if (!k) return;
     opts[k] = e.target.checked; rendu();
@@ -173,7 +160,6 @@
     } catch {
       D = window.SDR_FALLBACK || { products: [], settings: {} };
     }
-    majChoix();
     rendu();
   })();
 })();

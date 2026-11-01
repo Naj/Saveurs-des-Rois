@@ -314,7 +314,7 @@ const PUBLIC_SETTINGS = ['carte_mode',
   'contact_phone', 'contact_whatsapp', 'contact_email', 'contact_instagram', 'contact_facebook',
   'contact_tiktok', 'contact_zone', 'contact_hours', 'music_url', 'legal_text',
 ];
-const APP_VERSION = '3.3';
+const APP_VERSION = '3.4';
 // Colonnes restaurées depuis une sauvegarde (les colonnes inconnues sont ignorées)
 const RESTORE_COLUMNS = {
   products: ['id', 'name', 'arabic_name', 'tagline', 'description', 'price_cents', 'price_label', 'threshold', 'ingredients', 'allergens', 'traces',

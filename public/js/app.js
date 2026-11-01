@@ -642,7 +642,7 @@ function espaceProConnecte() {
   <section class="section" style="padding-top:1rem">
     <div class="wrap">
       <div class="pro-actions">
-        <a class="btn btn--sombre" href="/carte.html?tarifs=pro" target="_blank" rel="noopener">Télécharger la carte professionnels</a>
+        <a class="btn btn--sombre" href="/carte-pro.html" target="_blank" rel="noopener">Télécharger la carte professionnels</a>
         <a class="btn btn--ligne-sombre" href="#/devis">Mon devis</a>
         <button class="lien" type="button" data-pro-logout>Se déconnecter</button>
       </div>

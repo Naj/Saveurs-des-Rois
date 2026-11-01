@@ -87,3 +87,4 @@ small { color: var(--douce); font-style: italic; }
 .reserve img { width: 90px; margin: 0 auto 1rem; display: block; }
 .reserve h2 { font: 600 1.4rem "Cinzel", serif; color: var(--or); }
 .reserve .b { display: inline-block; text-decoration: none; margin-top: .5rem; }
+.outils__titre { font: 600 14px "Cinzel", serif; color: var(--or); letter-spacing: .06em; }

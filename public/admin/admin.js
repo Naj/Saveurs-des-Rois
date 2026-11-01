@@ -80,7 +80,7 @@ function demandeAvisLien(r) {
   return [tel && `<a href="https://wa.me/${tel}?text=${encodeURIComponent(texte)}" target="_blank" rel="noopener">Demander un avis (WhatsApp)</a>`,
     r.email && `<a href="mailto:${esc(r.email)}?subject=${encodeURIComponent('Votre avis compte pour nous')}&body=${encodeURIComponent(texte)}">Demander un avis (e-mail)</a>`].filter(Boolean).join('');
 }
-const ADMIN_VERSION = '3.3';
+const ADMIN_VERSION = '3.4';
 function alertBanner() {
   if (!st.version) return `<button class="adm-alerte adm-alerte--warn" data-goto="alertes">⚠️ Serveur du site pas à jour — voir l’onglet Alertes</button>`;
   const a = st.alerts || {};
@@ -750,19 +750,19 @@ function tCarte() {
   return `<h1>Carte PDF</h1>
   <p>Le lien « Télécharger la carte » du site (pied de page et collection) mène à la carte choisie ci-dessous.</p>
   <section class="adm-item">
-    <h2 style="font-size:1.1rem;margin-top:0">Carte proposée aux visiteurs</h2>
-    <label class="adm-mode adm-mode--large"><input type="radio" name="carte_mode" value="auto" ${auto ? 'checked' : ''}><span><strong>Carte générée depuis vos fiches</strong><small>Toujours à jour : prix, grilles dégressives, ingrédients et allergènes sont repris des fiches Produits. Rien à refaire quand un prix change.</small></span></label>
+    <h2 style="font-size:1.1rem;margin-top:0">Carte proposée aux particuliers (menu « La carte »)</h2>
+    <label class="adm-mode adm-mode--large"><input type="radio" name="carte_mode" value="auto" ${auto ? 'checked' : ''}><span><strong>Carte particuliers générée depuis vos fiches</strong><small>Toujours à jour : prix, grilles dégressives, ingrédients et allergènes sont repris des fiches Produits. Rien à refaire quand un prix change.</small></span></label>
     <label class="adm-mode adm-mode--large"><input type="radio" name="carte_mode" value="fichier" ${auto ? '' : 'checked'}><span><strong>Mon fichier PDF</strong><small>${f ? `Fichier importé : ${esc(f.name)} (${taille(f.size)}), le ${new Date(f.updated_at.replace(' ', 'T') + 'Z').toLocaleDateString('fr-FR')}.` : 'Actuellement : la carte d’origine fournie avec le site (vos fiches Canva).'}</small></span></label>
   </section>
   <div class="adm-stats-grid">
     <section class="adm-item">
-      <h2 style="font-size:1.1rem;margin-top:0">Carte générée</h2>
-      <p class="note">Couverture, tableau des tarifs et une page par pâtisserie, à vos couleurs. Vous pouvez aussi l’enregistrer en PDF pour l’envoyer ou l’imprimer.</p>
+      <h2 style="font-size:1.1rem;margin-top:0">Cartes générées depuis vos fiches</h2>
+      <p class="note">Deux cartes distinctes, toujours à jour : la <strong>carte particuliers</strong> (prix à la pièce et grille dégressive, sans aucun prix pro) et la <strong>carte professionnels</strong> (prix au kilo et pour 100 g), accessible uniquement aux pros connectés depuis leur Espace pro.</p>
       <div class="adm-actions">
-        <a class="btn btn--sombre btn--petit" href="/carte.html" target="_blank" rel="noopener">Ouvrir la carte générée</a>
-        <a class="btn btn--ligne btn--petit" href="/carte.html?tarifs=pro" target="_blank" rel="noopener">Carte professionnels (kilo et 100 g)</a>
+        <a class="btn btn--sombre btn--petit" href="/carte.html" target="_blank" rel="noopener">Carte particuliers</a>
+        <a class="btn btn--ligne btn--petit" href="/carte-pro.html" target="_blank" rel="noopener">Carte professionnels (kilo et 100 g)</a>
       </div>
-      <p class="note">Lien à envoyer à vos clients professionnels : <code>${location.origin}/carte.html?tarifs=pro</code></p>
+      <p class="note">Lien à envoyer à vos clients professionnels : <code>${location.origin}/carte-pro.html</code> (visible uniquement avec leur code d’accès)</p>
     </section>
     <section class="adm-item">
       <h2 style="font-size:1.1rem;margin-top:0">Mon fichier PDF</h2>

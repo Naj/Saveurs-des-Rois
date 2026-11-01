@@ -55,7 +55,7 @@ GitHub (code)  ──commit──▶  Cloudflare Pages (ou Workers) ──▶  S
 
 ## Bon à savoir
 
-- **Carte PDF** : onglet *Carte PDF* de l'admin — carte générée depuis les fiches (`/carte.html`, toujours à jour) ou votre PDF importé (`/carte.pdf`).
+- **Carte PDF** : onglet *Carte PDF* de l'admin — carte particuliers générée depuis les fiches (`/carte.html`) ou votre PDF importé (`/carte.pdf`) ; carte professionnels séparée (`/carte-pro.html`), réservée aux pros connectés.
 - **Photos importées dans l'admin** : stockées dans D1 (1,8 Mo max après compression). Pour un grand volume, prévoir Cloudflare R2.
 - **Musique d'ambiance** : fichier MP3/M4A importé dans l'admin (stocké dans D1), jamais lancée automatiquement. Uniquement une musique libre de droits ou sous licence.
 - **Alertes de devis** : e-mail (Resend) et/ou WhatsApp (CallMeBot), activées par des secrets Cloudflare — voir le guide.
