@@ -41,7 +41,8 @@ GitHub (code)  ──commit──▶  Cloudflare Pages (ou Workers) ──▶  S
 
 | Onglet | Ce que vous pouvez faire |
 |---|---|
-| Demandes | Demandes de devis et messages : **devis PDF à vos couleurs** (particuliers / pros), statut, réponse par e-mail ou WhatsApp ; état des alertes et envoi d'un test |
+| Particuliers | Demandes de devis et messages des particuliers : **devis PDF à vos couleurs** (particuliers / pros), statut, réponse par e-mail ou WhatsApp ; état des alertes et envoi d'un test |
+| Professionnels | Demandes d'accès pro (validation, code personnel, envoi WhatsApp/e-mail), devis des pros, clients actifs, suspension |
 | Produits | **Ajouter une recette** (fiche guidée ou copie d'une fiche existante, aperçu, liste « Prêt à publier ? ») ; nom, nom arabe, description, prix (pièce, kilo, les deux ou sur devis), **grille dégressive à paliers**, photos, ingrédients, allergènes, valeurs nutritionnelles ; masquer, mettre en avant, ajouter, supprimer |
 | Galerie | Photos de vos événements (titre, occasion, légende), affichées sur la page « Vos événements » et l'accueil |
 | Avis | Valider, refuser, répondre aux avis ; ajouter un avis reçu par message |
@@ -60,4 +61,5 @@ GitHub (code)  ──commit──▶  Cloudflare Pages (ou Workers) ──▶  S
 - **Alertes de devis** : e-mail (Resend) et/ou WhatsApp (CallMeBot), activées par des secrets Cloudflare — voir le guide.
 - **Applications installables (PWA)** : le site (icône noire, consultation hors connexion) et l'administration « SDR Gestion » (icône dorée, `admin/manifest.webmanifest`).
 - **Mises à jour** : vos fiches sont dans la base D1, jamais dans les fichiers ; une mise à jour ne les efface pas. Sauvegarde téléchargeable dans l'admin.
+- **Espace pro** : les prix au kilo ne sont envoyés qu'aux professionnels connectés par code (et à l'administratrice), jamais au public.
 - **Mot de passe** : jamais dans le code. Il est stocké chez Cloudflare (secret `ADMIN_PASSWORD`).

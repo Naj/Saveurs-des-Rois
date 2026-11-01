@@ -174,6 +174,8 @@ La page **Vos événements** (menu du site) réunit vos photos d'événements, l
 
 Admin → **Statistiques** : visites, pages vues, pâtisseries les plus consultées, ajouts au devis, demandes de devis, taux de transformation, provenance des visiteurs (Instagram, Google, accès direct…) et appareils. Mesure **anonyme, sans cookie** : aucun bandeau de consentement n'est nécessaire.
 
+**Exporter (Excel)** télécharge un fichier `.csv` qui s'ouvre directement dans Excel (résumé, détail par jour avec devis particuliers / professionnels, pâtisseries, provenances, pages, appareils). **Remettre à zéro** efface les compteurs de visites et fait repartir le comptage des demandes : vos demandes de devis elles-mêmes sont conservées. Exportez avant de remettre à zéro.
+
 **Astuce** : pour savoir quelles publications vous amènent des visiteurs, partagez l'adresse du site en ajoutant `?utm_source=instagram` (ou `whatsapp`, `facebook`, `tiktok`…), par exemple :
 `https://saveurs-des-rois.pages.dev/?utm_source=instagram`
 
@@ -265,6 +267,24 @@ Admin → **Carte PDF** : choisissez ce que propose le lien « Télécharger la 
 - **Carte générée depuis vos fiches** : couverture, tableau des tarifs et une page par pâtisserie (photo, prix, grille dégressive, prix pros, ingrédients, allergènes, valeurs nutritionnelles). **Toujours à jour** : rien à refaire quand vous changez un prix. Bouton *Ouvrir la carte générée* pour l'enregistrer en PDF et l'envoyer.
 - **Carte professionnels** : dans la carte générée, menu *Tarifs* → *Professionnels seulement* : uniquement les prix au kilo et pour 100 g, sans prix à la pièce. Lien direct à envoyer à vos pros : `…/carte.html?tarifs=pro`.
 - **Mon fichier PDF** : importez votre propre carte (Canva, Word…, 25 Mo maximum) ; *Revenir à la carte d'origine* rétablit celle fournie avec le site.
+
+---
+
+## Espace professionnel
+
+Les **prix au kilo ne sont plus visibles par le public** : seuls les professionnels à qui vous donnez un code d'accès les voient (sur le site, dans « Mon devis » et dans la carte professionnels). Les autres visiteurs voient « Tarifs dans l'Espace pro ».
+
+**Côté client professionnel** (menu **Espace pro**) :
+1. Il remplit la **demande d'accès** : entreprise, SIRET, activité, contact, volumes estimés.
+2. Vous recevez une alerte (si les alertes sont activées) et la demande apparaît dans l'admin.
+3. Il reçoit son **code personnel** (ex. `ABCD-EFGH`) ou directement un **lien qui le connecte tout seul**. Il reste connecté un an sur son appareil.
+4. Il voit ses tarifs au kilo et pour 100 g, ajoute ses quantités et envoie sa demande de devis, marquée **PRO** avec le nom de son entreprise.
+
+**Côté administration**, les demandes sont séparées en deux onglets :
+- **Particuliers** : devis et messages des particuliers ;
+- **Professionnels** : demandes d'accès à valider (**Accepter et créer le code** / **Refuser**, avec lien pour **vérifier le SIRET** sur l'annuaire officiel des entreprises), devis des pros, liste des clients actifs avec leur code et les boutons **Envoyer le code par WhatsApp / e-mail**. Vous pouvez aussi **créer un nouveau code** (l'ancien cesse aussitôt de fonctionner), **suspendre** un accès, ou **ajouter un client pro que vous connaissez déjà**.
+
+Le devis PDF d'une demande pro est prérempli avec le nom de l'entreprise, son SIRET et sa ville.
 
 ---
 
