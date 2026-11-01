@@ -10,7 +10,7 @@ const qteTxt = (q, kg) => kg ? String(Math.round(q * 1000) / 1000).replace('.', 
 const dateFr = iso => { const d = new Date(iso + 'T12:00:00'); return isNaN(d) ? '' : d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }); };
 
 const id = new URLSearchParams(location.search).get('id');
-let R, P, S, Q; // demande, produits, réglages, devis
+let R, P, S, Q, PRO; // demande, produits, réglages, devis
 
 const SECTIONS = {
   part: { titre: 'Particuliers — à la pièce', note: 'Prix unitaires, dégressivité appliquée selon les quantités.' },
@@ -51,7 +51,7 @@ function nouveauDevis() {
     numero: `DEV-${annee}-${String(R.id).padStart(4, '0')}`,
     date: new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Paris' }),
     validite: parseInt(S.quote_validity, 10) || 30,
-    client: { nom: R.name || '', societe: '', siret: '', adresse: '', tel: R.phone || '', email: R.email || '' },
+    client: { nom: R.name || '', societe: PRO?.company || '', siret: PRO?.siret || '', adresse: PRO?.city || '', tel: R.phone || '', email: R.email || '' },
     evenement: [R.event_type, R.event_date && `le ${dateFr(R.event_date)}`, R.delivery].filter(Boolean).join(' · '),
     lignes,
     remise: 0,     // % sur la partie particuliers
@@ -250,7 +250,7 @@ function barreEnvoi() {
   if (!id) { doc.innerHTML = '<p class="chargement">Aucune demande indiquée. Ouvrez le devis depuis l’onglet Demandes.</p>'; return; }
   try {
     const d = await api(`/api/admin/requests/${id}/quote`);
-    R = d.request; P = d.products; S = d.settings;
+    R = d.request; P = d.products; S = d.settings; PRO = d.pro;
     Q = R.quote || nouveauDevis();
     rendu();
     etat(R.quote ? 'Devis enregistré — reprise de votre dernière version' : 'Nouveau devis, prérempli depuis la demande');

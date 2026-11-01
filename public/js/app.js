@@ -74,8 +74,8 @@ function prixCarte(p) {
   const piece = `<p class="carte__prix"><strong>${euro(p.price_cents)}</strong> ${esc(p.price_label || 'la pièce')}</p>${seuilTexte(p) ? `<p class="carte__seuil">${seuilTexte(p)}</p>` : ''}`;
   const kg = `<p class="carte__prix"><strong>${euro(p.price_kg_cents || 0)}</strong> le kg</p>`;
   if (m === 'devis') return '<p class="carte__prix"><strong>Prix sur devis</strong></p>';
-  if (m === 'kg') return `${kg}<p class="carte__seuil">Professionnels · vente au poids</p>`;
-  if (m === 'both') return `${piece}<p class="carte__seuil carte__pro">Pros : ${euro(p.price_kg_cents || 0)} le kg</p>`;
+  if (m === 'kg') return estPro() ? `${kg}<p class="carte__seuil">Professionnels · vente au poids</p>` : '<p class="carte__prix"><strong>Vente aux professionnels</strong></p><p class="carte__seuil carte__pro">Tarifs dans l’Espace pro</p>';
+  if (m === 'both') return estPro() ? `${piece}<p class="carte__seuil carte__pro">Pros : ${euro(p.price_kg_cents || 0)} le kg</p>` : piece;
   return piece;
 }
 
@@ -295,8 +295,8 @@ function mesure(data) {
   try { navigator.sendBeacon('/api/track', JSON.stringify(data)); } catch { /* sans incidence */ }
 }
 function mesureVue() {
-  const hash = location.hash.replace(/^#\/?/, '');
-  const [page, arg] = hash.split('/');
+  const [chemin, qs] = location.hash.replace(/^#\/?/, '').split('?');
+  const [page, arg] = chemin.split('/');
   const data = { p: page || 'accueil' };
   if (page === 'p' && byId(arg)) data.prod = arg;
   let first = false;
@@ -418,8 +418,14 @@ function blocTarif(p, defaultQty, isBox) {
         <button class="btn btn--sombre" type="button" data-add="${esc(p.id)}@kg">Ajouter à mon devis</button>
       </div>
     </div>`;
-  if (m === 'kg') return kg('Professionnels');
-  if (m === 'both') return `<div class="tarifs-duo">${piece('Particuliers · à la pièce')}${kg('Professionnels · au poids')}</div>`;
+  const teaser = `
+    <div class="tarif tarif--pro tarif--verrou">
+      <p class="tarif__public">Professionnels · vente au poids</p>
+      <p>Restaurants, salons de thé, traiteurs, hôtels : cette pâtisserie est disponible au poids. Vos tarifs sont réservés à l’Espace pro.</p>
+      <a class="btn btn--ligne-sombre" href="#/pro">Accéder à l’Espace pro</a>
+    </div>`;
+  if (m === 'kg') return estPro() ? kg('Professionnels') : teaser;
+  if (m === 'both') return estPro() ? `<div class="tarifs-duo">${piece('Particuliers · à la pièce')}${kg('Professionnels · au poids')}</div>` : `${piece('')}${teaser}`;
   return piece('');
 }
 
@@ -483,12 +489,12 @@ function pageContact() {
 
 function pageDevis() {
   const sel = selection();
-  const lignes = Object.entries(sel).map(([k, qty]) => ({ k, p: byId(cle(k).id), kg: cle(k).kg, qty })).filter(l => l.p);
+  const lignes = Object.entries(sel).map(([k, qty]) => ({ k, p: byId(cle(k).id), kg: cle(k).kg, qty })).filter(l => l.p && (!l.kg || estPro()));
   const prixLigne = l => l.kg ? Math.round(l.qty * (l.p.price_kg_cents || 0)) : mode(l.p) === 'devis' ? 0 : prixUnitaire(l.p, l.qty) * l.qty;
   const total = lignes.reduce((t, l) => t + prixLigne(l), 0);
   const avecDevis = lignes.some(l => !l.kg && mode(l.p) === 'devis');
   return `
-  <section class="page-titre wrap"><h1>Mon devis</h1><p>${esc(set('quote_note'))}</p></section>
+  <section class="page-titre wrap"><h1>Mon devis</h1><p>${esc(set('quote_note'))}</p>${estPro() ? `<p class="badge-pro-devis">Demande professionnelle · ${esc(state.pro.company)}</p>` : ''}</section>
   <div class="wrap devis">
     <section aria-labelledby="sel-titre">
       <h2 id="sel-titre" class="sr">Ma sélection</h2>
@@ -570,14 +576,141 @@ function socialUrl(v, net) {
 }
 function handle(v) { return /^https?:/.test(v) ? v.replace(/^https?:\/\/(www\.)?/, '') : '@' + v.replace(/^@/, ''); }
 
+/* ---------------- Espace professionnel */
+const estPro = () => Boolean(state.pro);
+const ACTIVITES = ['Restaurant', 'Salon de thé / café', 'Traiteur', 'Hôtel', 'Épicerie fine / commerce', 'Organisateur d’événements', 'Entreprise (cadeaux, séminaires)', 'Autre'];
+
+function pageEspacePro() {
+  return estPro() ? espaceProConnecte() : espaceProAccueil();
+}
+
+function espaceProAccueil() {
+  return `
+  <section class="page-titre wrap"><h1>Espace professionnel</h1>
+    <p>Restaurants, salons de thé, traiteurs, hôtels, épiceries fines, organisateurs d’événements : nos pâtisseries marocaines au poids, à prix fixes.</p></section>
+  <section class="section" style="padding-top:1.5rem">
+    <div class="wrap pro-haut">
+      <ul class="pro-atouts">
+        <li><strong>Vente au poids</strong> dès 100 g, par tranche de 100 g.</li>
+        <li><strong>Prix fixes au kilo</strong>, communiqués dans votre espace.</li>
+        <li><strong>Fait maison</strong>, avec fiches ingrédients, allergènes et valeurs nutritionnelles pour votre affichage.</li>
+        <li><strong>Carte professionnelle</strong> téléchargeable et <strong>devis gratuit</strong>.</li>
+      </ul>
+      <div class="panneau pro-code">
+        <h2>Vous avez un code d’accès ?</h2>
+        <form id="formCodePro" novalidate>
+          <div class="message" id="codeMsg" hidden></div>
+          <div class="champ"><label for="pro-code">Code d’accès</label><input id="pro-code" name="code" autocomplete="one-time-code" autocapitalize="characters" placeholder="ABCD-EFGH" required></div>
+          <button class="btn btn--or" type="submit" style="width:100%">Accéder à mes tarifs</button>
+        </form>
+      </div>
+    </div>
+    <div class="wrap">
+      <div class="panneau pro-demande">
+        <h2>Demander un accès professionnel</h2>
+        <p class="note">Nous étudions chaque demande et vous envoyons votre code d’accès personnel, en général sous 48 h.</p>
+        <form id="formAccesPro" novalidate>
+          <div class="message" id="accesMsg" hidden></div>
+          <div class="deux">
+            <div class="champ"><label for="ap-company">Entreprise</label><input id="ap-company" name="company" autocomplete="organization" required></div>
+            <div class="champ"><label for="ap-siret">SIRET <span class="facultatif">(facultatif)</span></label><input id="ap-siret" name="siret" inputmode="numeric" placeholder="Si vous l’avez sous la main"></div>
+          </div>
+          <div class="deux">
+            <div class="champ"><label for="ap-activity">Activité</label><select id="ap-activity" name="activity"><option value="">Choisir…</option>${ACTIVITES.map(a => `<option>${esc(a)}</option>`).join('')}</select></div>
+            <div class="champ"><label for="ap-city">Ville</label><input id="ap-city" name="city" autocomplete="address-level2"></div>
+          </div>
+          <div class="champ"><label for="ap-name">Votre nom</label><input id="ap-name" name="contact_name" autocomplete="name" required></div>
+          <div class="deux">
+            <div class="champ"><label for="ap-phone">Téléphone</label><input id="ap-phone" name="phone" type="tel" autocomplete="tel"></div>
+            <div class="champ"><label for="ap-email">E-mail</label><input id="ap-email" name="email" type="email" autocomplete="email"></div>
+          </div>
+          <div class="champ"><label for="ap-volume">Volumes estimés (facultatif)</label><input id="ap-volume" name="volume" placeholder="Ex : 3 kg par semaine, commandes ponctuelles…"></div>
+          <div class="champ"><label for="ap-msg">Message (facultatif)</label><textarea id="ap-msg" name="message" placeholder="Pâtisseries qui vous intéressent, fréquence, livraison…"></textarea></div>
+          <div class="piege" aria-hidden="true"><label>Site web <input name="website" tabindex="-1" autocomplete="off"></label></div>
+          <label class="consent"><input type="checkbox" name="consent"> <span>J’accepte que ces informations servent uniquement à traiter ma demande d’accès.</span></label>
+          <button class="btn btn--or" type="submit" style="width:100%">Envoyer ma demande d’accès</button>
+        </form>
+      </div>
+    </div>
+  </section>`;
+}
+
+function espaceProConnecte() {
+  const prods = state.products.filter(p => ['kg', 'both'].includes(mode(p)) && p.price_kg_cents > 0);
+  return `
+  <section class="page-titre wrap"><h1>Espace professionnel</h1><p>Bienvenue, ${esc(state.pro.company)}. Voici vos tarifs au poids.</p></section>
+  <section class="section" style="padding-top:1rem">
+    <div class="wrap">
+      <div class="pro-actions">
+        <a class="btn btn--sombre" href="/carte.html?tarifs=pro" target="_blank" rel="noopener">Télécharger la carte professionnels</a>
+        <a class="btn btn--ligne-sombre" href="#/devis">Mon devis</a>
+        <button class="lien" type="button" data-pro-logout>Se déconnecter</button>
+      </div>
+      ${prods.length ? `<div class="pro-liste">${prods.map(p => `
+        <article class="pro-ligne">
+          <a href="#/p/${esc(p.id)}"><img src="${esc(asset(p.image))}" alt="" loading="lazy"></a>
+          <div class="pro-ligne__nom"><h3><a href="#/p/${esc(p.id)}">${esc(p.name)}</a></h3>${p.arabic_name ? `<p class="carte__ar" lang="ar" dir="rtl">${esc(p.arabic_name)}</p>` : ''}</div>
+          <div class="pro-ligne__prix"><strong>${euro(p.price_kg_cents)}</strong> le kg<br><span>${euro(Math.round(p.price_kg_cents / 10))} les 100 g</span></div>
+          <div class="ajout">${qteControl(p.id + '@kg', 1, 0.1, true)}<button class="btn btn--sombre" type="button" data-add="${esc(p.id)}@kg">Ajouter</button></div>
+        </article>`).join('')}</div>`
+        : '<div class="vide">Les tarifs au poids seront bientôt disponibles. Contactez-nous pour toute demande.</div>'}
+      <p class="note centre" style="margin-top:1.5rem">Vente par tranche de 100 g, prix fixes sans tarif dégressif. Votre demande de devis est transmise avec le nom de votre entreprise.</p>
+    </div>
+  </section>`;
+}
+
+async function rechargerCatalogue() {
+  const r = await fetch('/api/catalogue', { cache: 'no-store' });
+  if (r.ok) Object.assign(state, await r.json());
+  majNavPro(); updateCount(); route();
+}
+function majNavPro() {
+  document.querySelectorAll('[data-nav="pro"]').forEach(a => { a.textContent = estPro() ? 'Espace pro ✓' : 'Espace pro'; });
+}
+
+async function envoyerCodePro(form) {
+  const msg = form.querySelector('#codeMsg');
+  const code = form.elements.code.value;
+  if (!code.trim()) { msg.hidden = false; msg.className = 'message message--err'; msg.textContent = 'Saisissez votre code d’accès.'; return; }
+  const btn = form.querySelector('button'); btn.disabled = true;
+  try {
+    const r = await fetch('/api/pro/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Code refusé.');
+    history.replaceState(null, '', '#/pro');
+    await rechargerCatalogue();
+    toast(`Bienvenue, ${esc(d.company)} !`);
+  } catch (err) {
+    msg.hidden = false; msg.className = 'message message--err'; msg.textContent = err.message; btn.disabled = false;
+  }
+}
+
+async function envoyerDemandePro(form) {
+  const msg = form.querySelector('#accesMsg');
+  const d = Object.fromEntries(new FormData(form));
+  const show = t => { msg.hidden = false; msg.className = 'message message--err'; msg.textContent = t; msg.scrollIntoView({ block: 'nearest' }); };
+  if (!d.company?.trim()) return show('Indiquez le nom de votre entreprise.');
+  if (!d.contact_name?.trim()) return show('Indiquez votre nom.');
+  if (!d.phone?.trim() && !d.email?.trim()) return show('Indiquez un téléphone ou un e-mail pour que nous puissions vous répondre.');
+  if (!d.consent) return show('Cochez la case d’accord pour envoyer votre demande.');
+  const btn = form.querySelector('button[type=submit]'); btn.disabled = true;
+  try {
+    if (state.offline) throw new Error('Envoi indisponible pour le moment.');
+    const r = await fetch('/api/pro/demande', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(d) });
+    const res = await r.json();
+    if (!r.ok) throw new Error(res.error || 'Envoi impossible.');
+    form.innerHTML = '<div class="message message--ok"><strong>Demande envoyée, merci !</strong> Nous étudions votre demande et vous envoyons votre code d’accès personnel, en général sous 48 h.</div>';
+  } catch (err) { show(err.message); btn.disabled = false; }
+}
+
 /* ---------------- routeur */
 function route() {
   if (!state.loaded) return;
-  const hash = location.hash.replace(/^#\/?/, '');
-  const [page, arg] = hash.split('/');
+  const [chemin, qs] = location.hash.replace(/^#\/?/, '').split('?');
+  const [page, arg] = chemin.split('/');
   const pages = {
     '': pageAccueil, collection: pageCollection, p: () => pageProduit(decodeURIComponent(arg || '')),
-    histoire: pageHistoire, evenements: pageEvenements, avis: pageEvenements, videos: pageVideos, contact: pageContact, devis: pageDevis, mentions: pageMentions,
+    histoire: pageHistoire, pro: pageEspacePro, evenements: pageEvenements, avis: pageEvenements, videos: pageVideos, contact: pageContact, devis: pageDevis, mentions: pageMentions,
   };
   main.innerHTML = (pages[page] || pageIntrouvable)();
   document.querySelectorAll('[data-nav]').forEach(a => a.toggleAttribute('aria-current', a.dataset.nav === (page === 'p' ? 'collection' : page === 'avis' ? 'evenements' : page)));
@@ -588,6 +721,12 @@ function route() {
   window.scrollTo(0, 0);
   if (page) main.focus({ preventScroll: true });
   if (page === 'avis') document.getElementById('avis-form')?.scrollIntoView();
+  // Lien reçu par le pro : #/pro?code=ABCDEFGH → connexion automatique
+  const code = new URLSearchParams(qs || '').get('code');
+  if (page === 'pro' && code && !estPro()) {
+    const f = document.getElementById('formCodePro');
+    if (f) { f.elements.code.value = code; envoyerCodePro(f); }
+  }
 }
 function naviguer() { route(); mesureVue(); }
 
@@ -656,6 +795,8 @@ main.addEventListener('change', e => {
 
 main.addEventListener('submit', async e => {
   if (e.target.id === 'formAvis') return envoyerAvis(e);
+  if (e.target.id === 'formCodePro') { e.preventDefault(); return envoyerCodePro(e.target); }
+  if (e.target.id === 'formAccesPro') { e.preventDefault(); return envoyerDemandePro(e.target); }
   if (e.target.id !== 'form') return;
   e.preventDefault();
   const form = e.target;
@@ -666,7 +807,7 @@ main.addEventListener('submit', async e => {
   if (!data.phone?.trim() && !data.email?.trim()) return show('Indiquez un téléphone ou un e-mail pour que nous puissions vous répondre.');
   if (form.dataset.kind === 'contact' && !data.message?.trim()) return show('Écrivez votre message.');
   if (!data.consent) return show('Cochez la case d’accord pour envoyer votre demande.');
-  const items = form.dataset.kind === 'devis' ? Object.entries(selection()).map(([k, qty]) => ({ id: cle(k).id, unit: cle(k).kg ? 'kg' : 'piece', qty })) : [];
+  const items = form.dataset.kind === 'devis' ? Object.entries(selection()).filter(([k]) => !cle(k).kg || estPro()).map(([k, qty]) => ({ id: cle(k).id, unit: cle(k).kg ? 'kg' : 'piece', qty })) : [];
   const btn = form.querySelector('button[type="submit"]');
   btn.disabled = true;
   try {
@@ -761,16 +902,26 @@ async function init() {
     }
     console.warn('Catalogue embarqué utilisé :', err.message);
     Object.assign(state, structuredClone(window.SDR_FALLBACK), { loaded: true, offline: true });
+    state.products.forEach(x => { if (x.price_kg_cents) x.pro_dispo = true; delete x.price_kg_cents; });
     const why = IS_FILE ? 'Page ouverte directement depuis le disque.' : 'La base de données ne répond pas.';
     document.querySelector('.top').insertAdjacentHTML('afterend',
       `<div class="apercu" role="note">Aperçu hors ligne — ${why} La collection s’affiche, mais l’envoi de devis est indisponible.</div>`);
   }
   updateCount();
+  majNavPro();
   footer();
   setupMusic();
   naviguer();
 }
 window.addEventListener('hashchange', naviguer);
+document.addEventListener('click', async e => {
+  if (!e.target.closest('[data-pro-logout]')) return;
+  await fetch('/api/pro/logout', { method: 'POST' }).catch(() => {});
+  state.pro = null;
+  const sel = selection(); Object.keys(sel).forEach(k => { if (cle(k).kg) delete sel[k]; }); saveSelection(sel);
+  await rechargerCatalogue();
+  toast('Vous êtes déconnecté de l’Espace pro.');
+});
 
 /* ---------------- Application installable (PWA) */
 let invite = null; // évènement d'installation proposé par Chrome / Edge / Android

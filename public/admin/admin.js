@@ -6,7 +6,7 @@ const euro = c => ((c || 0) / 100).toLocaleString('fr-FR', { style: 'currency', 
 const STATUSES = ['nouveau', 'en cours', 'devis envoyé', 'confirmé', 'archivé'];
 const STATIC_IMAGES = ['sable-royal', 'cornes-de-gazelle', 'cornes-de-gazelle-coffrets', 'chbakia', 'haloua-sesame', 'makrout'].map(n => `/assets/img/${n}.webp`);
 
-const st = { products: [], videos: [], settings: {}, requests: [], media: [], gallery: [], reviews: [], tab: 'demandes', current: null, filter: 'actives', avisFiltre: 'en attente', statsJours: 30 };
+const st = { pros: [], filtrePro: 'actives', products: [], videos: [], settings: {}, requests: [], media: [], gallery: [], reviews: [], tab: 'demandes', current: null, filter: 'actives', avisFiltre: 'en attente', statsJours: 30 };
 
 /* ---------------- API */
 async function api(path, opts = {}) {
@@ -37,8 +37,8 @@ $('#logout').addEventListener('click', async () => { await api('/api/admin/logou
 
 async function start() {
   try {
-    const [o, r, a] = await Promise.all([api('/api/admin/overview'), api('/api/admin/requests'), api('/api/admin/reviews')]);
-    Object.assign(st, o, { requests: r.requests, reviews: a.reviews });
+    const [o, r, a, pr] = await Promise.all([api('/api/admin/overview'), api('/api/admin/requests'), api('/api/admin/reviews'), api('/api/admin/pros')]);
+    Object.assign(st, o, { requests: r.requests, reviews: a.reviews, pros: pr.pros });
   } catch { return showLogin(); }
   $('#login').hidden = true; $('#dash').hidden = false; $('#logout').hidden = false;
   const onglet = location.hash.slice(1); // raccourcis de l'application : /admin/#produits…
@@ -48,7 +48,9 @@ async function start() {
   countNew(); render();
 }
 function countNew() {
-  const n = st.requests.filter(r => r.status === 'nouveau').length; const b = $('#newCount'); b.textContent = n; b.hidden = !n;
+  const n = st.requests.filter(r => r.status === 'nouveau' && !r.pro_id).length; const b = $('#newCount'); b.textContent = n; b.hidden = !n;
+  const np = (st.pros || []).filter(p => p.status === 'en attente').length + st.requests.filter(r => r.status === 'nouveau' && r.pro_id).length;
+  const bp = $('#proCount'); bp.textContent = np; bp.hidden = !np;
   const a = st.reviews.filter(r => r.status === 'en attente').length; const c = $('#avisCount'); c.textContent = a; c.hidden = !a;
   const al = st.alerts || {}; $('#alertDot').hidden = Boolean(st.version && (al.email || al.whatsapp));
 }
@@ -60,7 +62,7 @@ document.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click',
 }));
 
 function render() {
-  const fn = { carte: tCarte, sauvegarde: tSauvegarde, alertes: tAlertes, demandes: tDemandes, produits: tProduits, galerie: tGalerie, avis: tAvis, stats: tStats, textes: tTextes, videos: tVideos, medias: tMedias }[st.tab];
+  const fn = { pros: tPros, carte: tCarte, sauvegarde: tSauvegarde, alertes: tAlertes, demandes: tDemandes, produits: tProduits, galerie: tGalerie, avis: tAvis, stats: tStats, textes: tTextes, videos: tVideos, medias: tMedias }[st.tab];
   $('#panel').innerHTML = fn();
   if (st.tab === 'medias') loadMedia();
   if (st.tab === 'textes') { majMusique(); if (!st.files) chargerFichiers().then(majMusique); }
@@ -78,7 +80,7 @@ function demandeAvisLien(r) {
   return [tel && `<a href="https://wa.me/${tel}?text=${encodeURIComponent(texte)}" target="_blank" rel="noopener">Demander un avis (WhatsApp)</a>`,
     r.email && `<a href="mailto:${esc(r.email)}?subject=${encodeURIComponent('Votre avis compte pour nous')}&body=${encodeURIComponent(texte)}">Demander un avis (e-mail)</a>`].filter(Boolean).join('');
 }
-const ADMIN_VERSION = '3.1';
+const ADMIN_VERSION = '3.3';
 function alertBanner() {
   if (!st.version) return `<button class="adm-alerte adm-alerte--warn" data-goto="alertes">⚠️ Serveur du site pas à jour — voir l’onglet Alertes</button>`;
   const a = st.alerts || {};
@@ -154,21 +156,11 @@ function tAlertes() {
     <li><strong>Retry deployment</strong>, puis rechargez cette page.</li>`)}
   <p class="note">Version de l’administration : ${ADMIN_VERSION} · serveur : ${esc(st.version || 'ancien')}</p>`;
 }
-function tDemandes() {
-  const list = st.requests.filter(r => st.filter === 'toutes' || (st.filter === 'actives' ? r.status !== 'archivé' : r.status === st.filter));
+function carteDemande(r) {
   return `
-  <div class="adm-bar">
-    <h1 style="margin:0">Demandes de devis et messages</h1>
-    ${alertBanner()}${rappelSauvegarde()}
-    <select id="filter" aria-label="Filtrer">
-      ${['actives', 'toutes', ...STATUSES].map(s => `<option ${s === st.filter ? 'selected' : ''}>${s}</option>`).join('')}
-    </select>
-  </div>
-  <div class="adm-list">
-    ${list.length ? list.map(r => `
     <article class="adm-item ${r.status === 'nouveau' ? 'adm-item--nouveau' : ''}">
       <header>
-        <h3>${esc(r.name)} <span class="adm-meta">— ${r.kind === 'contact' ? 'message' : 'devis'}</span></h3>
+        <h3>${r.pro_id ? `<span class="adm-pro">PRO</span> ${esc(st.pros?.find(x => x.id === r.pro_id)?.company || 'Professionnel')} · ` : ''}${esc(r.name)} <span class="adm-meta">— ${r.kind === 'contact' ? 'message' : 'devis'}</span></h3>
         <span class="adm-meta">${new Date(r.created_at + 'Z').toLocaleString('fr-FR', { dateStyle: 'medium', timeStyle: 'short' })}</span>
       </header>
       <p class="adm-meta">${[r.phone && `<a href="tel:${esc(r.phone)}">${esc(r.phone)}</a>`, r.email && `<a href="mailto:${esc(r.email)}">${esc(r.email)}</a>`, r.event_type, r.event_date && 'le ' + new Date(r.event_date).toLocaleDateString('fr-FR'), r.delivery].filter(Boolean).join(' · ')}</p>
@@ -182,7 +174,94 @@ function tDemandes() {
         ${r.kind === 'devis' && ['confirmé', 'archivé'].includes(r.status) ? demandeAvisLien(r) : ''}
         <button class="lien" data-delreq="${r.id}" style="color:var(--err)">Supprimer</button>
       </div>
-    </article>`).join('') : '<div class="vide">Aucune demande dans cette catégorie.</div>'}
+    </article>`;
+}
+/* ---------------- Professionnels */
+const codeTxt = c => (c ? c.match(/.{1,4}/g).join('-') : '');
+const dateFr = d => (d ? new Date(d.replace(' ', 'T') + 'Z').toLocaleDateString('fr-FR', { dateStyle: 'medium' }) : '');
+function messageCode(pro) {
+  const lien = `${location.origin}/#/pro?code=${pro.code}`;
+  return `Bonjour ${(pro.contact_name || '').split(' ')[0]},\n\nVotre accès professionnel Saveurs des Rois est ouvert.\n\nVos tarifs au poids : ${lien}\nVotre code d’accès personnel : ${codeTxt(pro.code)}\n\nÀ très bientôt,\nSaveurs des Rois`;
+}
+function envoiCode(pro) {
+  const txt = messageCode(pro), tel = (pro.phone || '').replace(/\D/g, '').replace(/^0/, '33');
+  return [tel && `<a class="btn btn--or btn--petit" href="https://wa.me/${tel}?text=${encodeURIComponent(txt)}" target="_blank" rel="noopener">Envoyer le code par WhatsApp</a>`,
+    pro.email && `<a class="btn btn--ligne btn--petit" href="mailto:${esc(pro.email)}?subject=${encodeURIComponent('Votre accès professionnel Saveurs des Rois')}&body=${encodeURIComponent(txt)}">Envoyer par e-mail</a>`,
+    `<button type="button" class="lien" data-copier="${esc(txt)}">Copier le message</button>`].filter(Boolean).join('');
+}
+function fichePro(pro) {
+  const infos = [pro.activity, pro.city, pro.siret && `SIRET ${pro.siret} <a href="https://annuaire-entreprises.data.gouv.fr/rechercher?terme=${encodeURIComponent(pro.siret)}" target="_blank" rel="noopener">vérifier</a>`].filter(Boolean);
+  const contact = [pro.contact_name && esc(pro.contact_name), pro.phone && `<a href="tel:${esc(pro.phone)}">${esc(pro.phone)}</a>`, pro.email && `<a href="mailto:${esc(pro.email)}">${esc(pro.email)}</a>`].filter(Boolean);
+  const devis = st.requests.filter(r => r.pro_id === pro.id).length;
+  return `<article class="adm-item ${pro.status === 'en attente' ? 'adm-item--nouveau' : ''} adm-pro-fiche">
+    <header><h3>${esc(pro.company)} <span class="adm-statut adm-statut--${esc(pro.status.replace(/\s/g, '-').replace('é', 'e'))}">${esc(pro.status)}</span></h3>
+      <span class="adm-meta">${pro.status === 'en attente' ? 'Demande du ' : 'Client depuis le '}${dateFr(pro.created_at)}${pro.last_login ? ` · dernière connexion le ${dateFr(pro.last_login)}` : ''}${devis ? ` · ${devis} demande${devis > 1 ? 's' : ''} de devis` : ''}</span></header>
+    ${infos.length ? `<p class="adm-meta">${infos.map(x => x.startsWith('SIRET') ? x : esc(x)).join(' · ')}</p>` : ''}
+    <p class="adm-meta">${contact.join(' · ')}</p>
+    ${pro.volume ? `<p><strong>Volumes :</strong> ${esc(pro.volume)}</p>` : ''}
+    ${pro.message ? `<p style="white-space:pre-wrap">${esc(pro.message)}</p>` : ''}
+    ${pro.status === 'actif' ? `<p class="adm-code">Code d’accès : <strong>${codeTxt(pro.code)}</strong></p><div class="adm-actions">${envoiCode(pro)}</div>` : ''}
+    <div class="adm-actions">
+      ${pro.status === 'en attente' ? `<button class="btn btn--or btn--petit" data-pro="${pro.id}" data-pro-statut="actif">Accepter et créer le code</button><button class="btn btn--ligne btn--petit" data-pro="${pro.id}" data-pro-statut="refusé">Refuser</button>` : ''}
+      ${pro.status === 'actif' ? `<button class="lien" data-pro="${pro.id}" data-pro-code>Créer un nouveau code</button><button class="lien" data-pro="${pro.id}" data-pro-statut="suspendu">Suspendre l’accès</button>` : ''}
+      ${['suspendu', 'refusé'].includes(pro.status) ? `<button class="btn btn--ligne btn--petit" data-pro="${pro.id}" data-pro-statut="actif">${pro.status === 'refusé' ? 'Accepter finalement' : 'Réactiver l’accès'}</button>` : ''}
+      <button class="lien" data-pro="${pro.id}" data-pro-suppr style="color:var(--err)">Supprimer</button>
+    </div>
+  </article>`;
+}
+function tPros() {
+  const pros = st.pros || [];
+  const attente = pros.filter(p => p.status === 'en attente'), actifs = pros.filter(p => p.status === 'actif'), autres = pros.filter(p => ['suspendu', 'refusé'].includes(p.status));
+  const devis = st.requests.filter(r => r.pro_id && (st.filtrePro === 'toutes' || (st.filtrePro === 'actives' ? r.status !== 'archivé' : r.status === st.filtrePro)));
+  return `<div class="adm-bar"><h1 style="margin:0">Professionnels</h1>${alertBanner()}</div>
+  <p class="note">Les prix au kilo ne sont visibles que par les professionnels à qui vous avez donné un code d’accès. Les autres visiteurs voient « Tarifs dans l’Espace pro ».</p>
+
+  <h2 class="adm-h2">Demandes d’accès <span class="badge" ${attente.length ? '' : 'hidden'}>${attente.length}</span></h2>
+  <div class="adm-list">${attente.map(fichePro).join('') || '<div class="vide">Aucune demande d’accès en attente.</div>'}</div>
+
+  <div class="adm-bar" style="margin-top:2rem"><h2 class="adm-h2" style="margin:0">Demandes de devis des professionnels</h2>
+    <select id="filtrePro" aria-label="Filtrer">${['actives', 'toutes', ...STATUSES].map(s => `<option ${s === st.filtrePro ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
+  <div class="adm-list">${devis.map(carteDemande).join('') || '<div class="vide">Aucune demande de devis professionnelle dans cette catégorie.</div>'}</div>
+
+  <h2 class="adm-h2" style="margin-top:2rem">Clients professionnels actifs (${actifs.length})</h2>
+  <div class="adm-list">${actifs.map(fichePro).join('') || '<div class="vide">Aucun client professionnel actif pour l’instant.</div>'}</div>
+
+  <details class="adm-item" style="margin-top:1.2rem">
+    <summary class="lien" style="cursor:pointer">Ajouter un client professionnel que vous connaissez déjà</summary>
+    <form id="ajoutPro" style="margin-top:1rem">
+      <div class="deux">
+        <div class="champ"><label>Entreprise</label><input name="company" required></div>
+        <div class="champ"><label>Contact</label><input name="contact_name"></div>
+      </div>
+      <div class="trois">
+        <div class="champ"><label>Téléphone</label><input name="phone" type="tel"></div>
+        <div class="champ"><label>E-mail</label><input name="email" type="email"></div>
+        <div class="champ"><label>Ville</label><input name="city"></div>
+      </div>
+      <div class="deux">
+        <div class="champ"><label>Activité</label><input name="activity" placeholder="Restaurant, traiteur…"></div>
+        <div class="champ"><label>SIRET (facultatif)</label><input name="siret" inputmode="numeric"></div>
+      </div>
+      <button class="btn btn--sombre btn--petit" type="submit">Créer l’accès et le code</button>
+    </form>
+  </details>
+
+  ${autres.length ? `<h2 class="adm-h2" style="margin-top:2rem">Accès suspendus ou refusés</h2><div class="adm-list">${autres.map(fichePro).join('')}</div>` : ''}`;
+}
+async function chargerPros() { st.pros = (await api('/api/admin/pros')).pros; }
+
+function tDemandes() {
+  const list = st.requests.filter(r => !r.pro_id).filter(r => st.filter === 'toutes' || (st.filter === 'actives' ? r.status !== 'archivé' : r.status === st.filter));
+  return `
+  <div class="adm-bar">
+    <h1 style="margin:0">Demandes des particuliers</h1>
+    ${alertBanner()}${rappelSauvegarde()}
+    <select id="filter" aria-label="Filtrer">
+      ${['actives', 'toutes', ...STATUSES].map(s => `<option ${s === st.filter ? 'selected' : ''}>${s}</option>`).join('')}
+    </select>
+  </div>
+  <div class="adm-list">
+    ${list.length ? list.map(carteDemande).join('') : '<div class="vide">Aucune demande dans cette catégorie.</div>'}
   </div>`;
 }
 
@@ -524,7 +603,11 @@ function tAvis() {
 /* ---------------- Statistiques */
 function tStats() {
   return `<div class="adm-bar"><h1 style="margin:0">Statistiques de visites</h1>
-    <select id="statsJours" aria-label="Période">${[[7, '7 derniers jours'], [30, '30 derniers jours'], [90, '3 derniers mois'], [365, '12 derniers mois']].map(([v, l]) => `<option value="${v}" ${v === st.statsJours ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+    <div class="adm-actions" style="margin:0">
+      <button type="button" class="btn btn--ligne btn--petit" id="statsExport">Exporter (Excel)</button>
+      <button type="button" class="btn btn--danger btn--petit" id="statsRaz">Remettre à zéro</button>
+    <select id="statsJours" aria-label="Période">${[[7, '7 derniers jours'], [30, '30 derniers jours'], [90, '3 derniers mois'], [365, '12 derniers mois']].map(([v, l]) => `<option value="${v}" ${v === st.statsJours ? 'selected' : ''}>${l}</option>`).join('')}</select></div></div>
+  <p class="note" id="statsRazInfo"></p>
   <p class="note">Mesure anonyme réalisée par le site : aucun cookie, aucune adresse IP, aucune donnée personnelle — seulement des compteurs par jour. Les robots sont exclus.</p>
   <div id="statsZone"><p>Chargement…</p></div>`;
 }
@@ -535,6 +618,7 @@ async function loadStats() {
   const top = kind => Object.entries(d.rows.filter(r => r.kind === kind).reduce((o, r) => (o[r.key] = (o[r.key] || 0) + r.n, o), {})).sort((a, b) => b[1] - a[1]);
   const visites = sum('visite'), vues = sum('page'), fiches = sum('produit'), ajouts = sum('ajout');
   const devis = d.requests.filter(r => r.kind === 'devis').reduce((t, r) => t + r.n, 0);
+  const devisPro = d.requests.filter(r => r.kind === 'devis' && r.pro).reduce((t, r) => t + r.n, 0);
   const taux = visites ? (devis / visites * 100).toFixed(1).replace('.', ',') + ' %' : '—';
   // Série par jour
   const jours = [];
@@ -544,13 +628,27 @@ async function loadStats() {
   const W = 720, H = 180, bw = W / jours.length;
   const barres = parJour.map((v, i) => `<rect x="${(i * bw + bw * .15).toFixed(1)}" y="${(H - v / max * (H - 20)).toFixed(1)}" width="${(bw * .7).toFixed(1)}" height="${(v / max * (H - 20)).toFixed(1)}" rx="2"><title>${new Date(jours[i]).toLocaleDateString('fr-FR')} : ${v} visite${v > 1 ? 's' : ''}</title></rect>`).join('');
   const noms = Object.fromEntries(st.products.map(p => [p.id, p.name]));
-  const pagesNoms = { accueil: 'Accueil', collection: 'La collection', p: 'Fiches pâtisseries', histoire: 'Notre histoire', evenements: 'Vos événements', avis: 'Laisser un avis', videos: 'En vidéo', contact: 'Contact', devis: 'Mon devis', mentions: 'Mentions légales' };
+  const pagesNoms = { pro: 'Espace pro', accueil: 'Accueil', collection: 'La collection', p: 'Fiches pâtisseries', histoire: 'Notre histoire', evenements: 'Vos événements', avis: 'Laisser un avis', videos: 'En vidéo', contact: 'Contact', devis: 'Mon devis', mentions: 'Mentions légales' };
   const ajoutsPar = Object.fromEntries(top('ajout'));
   const tableau = (titre, rows, cols) => `<section class="adm-item"><h2 style="font-size:1.1rem">${titre}</h2>${rows.length ? `<table class="adm-table"><thead><tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr></thead><tbody>${rows.map(r => `<tr>${r.map((c, i) => `<td${i ? ' class="num"' : ''}>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>` : '<p class="note">Pas encore de données.</p>'}</section>`;
   const pct = (n, t) => t ? Math.round(n / t * 100) + ' %' : '';
+  const info = $('#statsRazInfo');
+  if (info) info.textContent = d.raz ? `Compteurs remis à zéro le ${new Date(d.raz.replace(' ', 'T') + 'Z').toLocaleString('fr-FR', { dateStyle: 'long', timeStyle: 'short' })}.` : '';
+  // Données conservées pour l'export
+  const parJourDe = (kind, j) => d.rows.filter(r => r.day === j && r.kind === kind).reduce((t, r) => t + r.n, 0);
+  const devisDe = (j, pro) => d.requests.filter(r => r.day === j && r.kind === 'devis' && (pro === undefined || Boolean(r.pro) === pro)).reduce((t, r) => t + r.n, 0);
+  st.statsExport = {
+    periode: `${new Date(jours[0]).toLocaleDateString('fr-FR')} au ${new Date(jours.at(-1)).toLocaleDateString('fr-FR')}`,
+    resume: [['Visites', visites], ['Pages vues', vues], ['Fiches consultées', fiches], ['Ajouts au devis', ajouts], ['Demandes de devis', devis], ['dont professionnels', devisPro], ['Taux visites → devis', taux]],
+    jours: jours.map(j => [new Date(j).toLocaleDateString('fr-FR'), parJourDe('visite', j), parJourDe('page', j), parJourDe('produit', j), parJourDe('ajout', j), devisDe(j, false), devisDe(j, true)]),
+    produits: top('produit').map(([k, n]) => [noms[k] || k, n, ajoutsPar[k] || 0]),
+    sources: top('source').map(([k, n]) => [k === 'direct' ? 'Accès direct / lien partagé' : k, n]),
+    pages: top('page').map(([k, n]) => [pagesNoms[k] || k, n]),
+    appareils: top('appareil').map(([k, n]) => [k, n]),
+  };
   z.innerHTML = `
     <div class="adm-kpis">
-      ${[['Visites', visites], ['Pages vues', vues], ['Fiches consultées', fiches], ['Ajouts au devis', ajouts], ['Demandes de devis', devis], ['Visites → devis', taux]].map(([l, v]) => `<div class="adm-kpi"><span>${l}</span><strong>${v}</strong></div>`).join('')}
+      ${[['Visites', visites], ['Pages vues', vues], ['Fiches consultées', fiches], ['Ajouts au devis', ajouts], ['Demandes de devis', devisPro ? `${devis} <small>dont ${devisPro} pro</small>` : devis], ['Visites → devis', taux]].map(([l, v]) => `<div class="adm-kpi"><span>${l}</span><strong>${v}</strong></div>`).join('')}
     </div>
     <section class="adm-item"><h2 style="font-size:1.1rem">Visites par jour</h2>
       <svg class="adm-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Visites par jour">${barres}</svg>
@@ -563,6 +661,27 @@ async function loadStats() {
       ${tableau('Appareils', top('appareil').map(([k, n]) => [esc(k[0].toUpperCase() + k.slice(1)), n, pct(n, visites)]), ['Appareil', 'Visites', 'Part'])}
     </div>
     <p class="note">Astuce : pour savoir quelles publications Instagram ou WhatsApp vous amènent des visiteurs, partagez le lien du site en ajoutant <code>?utm_source=instagram</code> (ou <code>whatsapp</code>, <code>facebook</code>…) à la fin de l’adresse.</p>`;
+}
+
+/* Export Excel : fichier CSV (séparateur « ; », accents conservés) qui s'ouvre directement dans Excel */
+function exporterStats() {
+  const x = st.statsExport; if (!x) return toast('Statistiques en cours de chargement…');
+  const cel = v => { const t = String(v ?? ''); return /[;"\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+  const bloc = (titre, entetes, lignes) => [[titre], entetes, ...lignes, []];
+  const lignes = [
+    ['Statistiques Saveurs des Rois'], [`Période : ${x.periode}`], [`Export du ${new Date().toLocaleString('fr-FR')}`], [],
+    ...bloc('Résumé', ['Indicateur', 'Valeur'], x.resume),
+    ...bloc('Par jour', ['Date', 'Visites', 'Pages vues', 'Fiches consultées', 'Ajouts au devis', 'Devis particuliers', 'Devis professionnels'], x.jours),
+    ...bloc('Pâtisseries les plus consultées', ['Pâtisserie', 'Vues', 'Ajouts au devis'], x.produits),
+    ...bloc('Provenance des visiteurs', ['Source', 'Visites'], x.sources),
+    ...bloc('Pages les plus vues', ['Page', 'Vues'], x.pages),
+    ...bloc('Appareils', ['Appareil', 'Visites'], x.appareils),
+  ];
+  const csv = '\ufeff' + lignes.map(l => l.map(cel).join(';')).join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  a.download = `statistiques-saveurs-des-rois-${new Date().toLocaleDateString('sv-SE')}.csv`;
+  document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
 
 /* ---------------- Fichiers (musique, carte) */
@@ -763,6 +882,7 @@ $('#pickerUpload').addEventListener('change', e => run(async () => {
 const panel = $('#panel');
 panel.addEventListener('change', e => {
   if (e.target.id === 'filter') { st.filter = e.target.value; render(); }
+  if (e.target.id === 'filtrePro') { st.filtrePro = e.target.value; render(); }
   if (e.target.id === 'avisFiltre') { st.avisFiltre = e.target.value; render(); }
   if (e.target.id === 'statsJours') { st.statsJours = +e.target.value; render(); }
   if (e.target.dataset.status) run(async () => {
@@ -851,6 +971,10 @@ panel.addEventListener('click', e => {
     await api(`/api/admin/gallery/${t.dataset.delgalerie}`, { method: 'DELETE' });
     st.gallery = st.gallery.filter(g => g.id !== +t.dataset.delgalerie); render();
   }, 'Photo retirée.');
+  if (t.id === 'statsExport') return exporterStats();
+  if (t.id === 'statsRaz' && confirm('Remettre toutes les statistiques à zéro ?\n\nVisites, pages vues, provenances et appareils seront effacés définitivement. Vos demandes de devis sont conservées (seul leur comptage repart de zéro).\n\nConseil : exportez d’abord les statistiques.')) return run(async () => {
+    await api('/api/admin/stats', { method: 'DELETE' }); render();
+  }, 'Statistiques remises à zéro.');
   if (t.id === 'musicClear') return run(async () => {
     if (st.files?.musique) await api('/api/admin/files/musique', { method: 'DELETE' });
     await api('/api/admin/settings', { method: 'PUT', body: { music_url: '' } });
@@ -869,6 +993,18 @@ panel.addEventListener('click', e => {
     await api(`/api/admin/products/${st.current}`, { method: 'DELETE' });
     st.products = st.products.filter(p => p.id !== st.current); st.current = null; render();
   }, 'Produit supprimé.');
+  if (t.dataset.copier) { navigator.clipboard?.writeText(t.dataset.copier).then(() => toast('Message copié.')).catch(() => toast('Copie impossible : sélectionnez le texte à la main.')); return; }
+  if (t.dataset.pro && t.dataset.proStatut) return run(async () => {
+    const r = await api(`/api/admin/pros/${t.dataset.pro}`, { method: 'PUT', body: { status: t.dataset.proStatut } });
+    await chargerPros(); countNew(); render();
+    if (t.dataset.proStatut === 'actif') toast(`Accès ouvert · code ${codeTxt(r.code)} : envoyez-le avec les boutons de la fiche.`);
+  }, t.dataset.proStatut === 'actif' ? '' : 'Statut mis à jour.');
+  if (t.dataset.pro && 'proCode' in t.dataset && confirm('Créer un nouveau code ? L’ancien ne fonctionnera plus, et ce client devra saisir le nouveau.')) return run(async () => {
+    await api(`/api/admin/pros/${t.dataset.pro}`, { method: 'PUT', body: { nouveau_code: true } }); await chargerPros(); render();
+  }, 'Nouveau code créé : pensez à l’envoyer.');
+  if (t.dataset.pro && 'proSuppr' in t.dataset && confirm('Supprimer ce professionnel ? Son accès sera coupé. Ses demandes de devis sont conservées.')) return run(async () => {
+    await api(`/api/admin/pros/${t.dataset.pro}`, { method: 'DELETE' }); await chargerPros(); countNew(); render();
+  }, 'Professionnel supprimé.');
   if (t.dataset.delreq && confirm('Supprimer cette demande ?')) return run(async () => {
     await api(`/api/admin/requests/${t.dataset.delreq}`, { method: 'DELETE' });
     st.requests = st.requests.filter(r => r.id !== +t.dataset.delreq); countNew(); render();
@@ -906,6 +1042,10 @@ panel.addEventListener('submit', e => {
     await api(id ? `/api/admin/gallery/${id}` : '/api/admin/gallery', { method: id ? 'PUT' : 'POST', body: data });
     st.gallery = (await api('/api/admin/overview')).gallery; render();
   }, 'Galerie mise à jour.');
+  if (form.id === 'ajoutPro') return run(async () => {
+    const r = await api('/api/admin/pros', { method: 'POST', body: Object.fromEntries(new FormData(form)) });
+    await chargerPros(); render(); toast(`Accès créé · code ${codeTxt(r.code)}`);
+  });
   if (form.id === 'avisManuel') return run(async () => {
     await api('/api/admin/reviews', { method: 'POST', body: Object.fromEntries(new FormData(form)) });
     st.reviews = (await api('/api/admin/reviews')).reviews; st.avisFiltre = 'publié'; render();

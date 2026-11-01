@@ -83,3 +83,7 @@ small { color: var(--douce); font-style: italic; }
 .couv__pro { font: 600 11pt "Cinzel", serif; letter-spacing: .1em; color: var(--nuit); background: var(--or); padding: 1.5mm 5mm; border-radius: 99px; margin: 0 0 6mm; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .prix__cent { margin: -1mm 0 2mm; font-size: 12pt; }
 .prix .prix__pro:first-child { margin: 0 0 2mm; }
+.reserve { max-width: 30rem; margin: 3rem auto; background: var(--nuit); color: var(--ivoire); text-align: center; padding: 2.5rem 1.5rem; border-radius: 18px; border: 1px solid var(--or); }
+.reserve img { width: 90px; margin: 0 auto 1rem; display: block; }
+.reserve h2 { font: 600 1.4rem "Cinzel", serif; color: var(--or); }
+.reserve .b { display: inline-block; text-decoration: none; margin-top: .5rem; }

@@ -11,15 +11,16 @@
 /* ============================== Base de données : structure et contenu initial ============================== */
 
 
-const SCHEMA_VERSION = '8';
+const SCHEMA_VERSION = '9';
 
 // Colonnes ajoutées après la première version (ajoutées une à une, sans rien effacer)
 const ADD_COLUMNS = [
   "ALTER TABLE products ADD COLUMN price_mode TEXT DEFAULT 'piece'",   // piece | kg | both | devis
   'ALTER TABLE products ADD COLUMN price_kg_cents INTEGER',            // prix au kilo (professionnels)
   'ALTER TABLE products ADD COLUMN min_kg REAL',                       // commande minimale au kilo
-  'ALTER TABLE requests ADD COLUMN quote TEXT',
-  'ALTER TABLE products ADD COLUMN tiers TEXT',                        // grille dégressive : [{min, price_cents}]                        // devis PDF enregistré (JSON)
+  'ALTER TABLE requests ADD COLUMN quote TEXT',                        // devis PDF enregistré (JSON)
+  'ALTER TABLE products ADD COLUMN tiers TEXT',                        // grille dégressive : [{min, price_cents}]
+  'ALTER TABLE requests ADD COLUMN pro_id INTEGER',                    // demande envoyée par un client professionnel
 ];
 
 const SCHEMA = [
@@ -35,7 +36,8 @@ const SCHEMA = [
   "CREATE INDEX IF NOT EXISTS idx_reviews_status ON reviews(status, created_at)",
   "CREATE TABLE IF NOT EXISTS stats ( day TEXT NOT NULL, kind TEXT NOT NULL, key TEXT NOT NULL DEFAULT '', n INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (day, kind, key) )",
   "CREATE TABLE IF NOT EXISTS file_meta ( id TEXT PRIMARY KEY, name TEXT, mime TEXT, size INTEGER, chunks INTEGER, updated_at TEXT DEFAULT (datetime('now')) )",
-  "CREATE TABLE IF NOT EXISTS file_chunks ( id TEXT NOT NULL, idx INTEGER NOT NULL, data BLOB NOT NULL, PRIMARY KEY (id, idx) )"
+  "CREATE TABLE IF NOT EXISTS file_chunks ( id TEXT NOT NULL, idx INTEGER NOT NULL, data BLOB NOT NULL, PRIMARY KEY (id, idx) )",
+  "CREATE TABLE IF NOT EXISTS pros ( id INTEGER PRIMARY KEY AUTOINCREMENT, company TEXT NOT NULL, siret TEXT, activity TEXT, contact_name TEXT, email TEXT, phone TEXT, city TEXT, volume TEXT, message TEXT, code TEXT UNIQUE, status TEXT DEFAULT 'en attente', note TEXT, created_at TEXT DEFAULT (datetime('now')), last_login TEXT )"
 ];
 
 // Requêtes paramétrées : aucun souci d'apostrophes ni de retours à la ligne.
@@ -312,7 +314,7 @@ const PUBLIC_SETTINGS = ['carte_mode',
   'contact_phone', 'contact_whatsapp', 'contact_email', 'contact_instagram', 'contact_facebook',
   'contact_tiktok', 'contact_zone', 'contact_hours', 'music_url', 'legal_text',
 ];
-const APP_VERSION = '3.1';
+const APP_VERSION = '3.3';
 // Colonnes restaurées depuis une sauvegarde (les colonnes inconnues sont ignorées)
 const RESTORE_COLUMNS = {
   products: ['id', 'name', 'arabic_name', 'tagline', 'description', 'price_cents', 'price_label', 'threshold', 'ingredients', 'allergens', 'traces',
@@ -322,7 +324,8 @@ const RESTORE_COLUMNS = {
   videos: ['id', 'title', 'description', 'url', 'poster', 'product_id', 'visible', 'position', 'created_at'],
   gallery: ['id', 'image', 'title', 'event_type', 'caption', 'visible', 'position', 'created_at'],
   reviews: ['id', 'name', 'event_type', 'rating', 'text', 'reply', 'source', 'status', 'event_date', 'created_at'],
-  requests: ['id', 'kind', 'name', 'email', 'phone', 'event_date', 'event_type', 'delivery', 'message', 'items', 'estimate_cents', 'status', 'created_at', 'quote'],
+  requests: ['id', 'kind', 'name', 'email', 'phone', 'event_date', 'event_type', 'delivery', 'message', 'items', 'estimate_cents', 'status', 'created_at', 'quote', 'pro_id'],
+  pros: ['id', 'company', 'siret', 'activity', 'contact_name', 'email', 'phone', 'city', 'volume', 'message', 'code', 'status', 'note', 'created_at', 'last_login'],
   media: ['id', 'name', 'mime', 'size', 'data', 'created_at'],
   file_meta: ['id', 'name', 'mime', 'size', 'chunks', 'updated_at'],
   file_chunks: ['id', 'idx', 'data'],
@@ -330,7 +333,7 @@ const RESTORE_COLUMNS = {
 const BINARY_TABLES = ['media', 'file_chunks'];
 const GALLERY_FIELDS = ['image', 'title', 'event_type', 'caption', 'visible', 'position'];
 const REVIEW_STATUSES = ['en attente', 'publié', 'refusé'];
-const TRACK_PAGES = ['accueil', 'collection', 'p', 'histoire', 'evenements', 'avis', 'videos', 'contact', 'devis', 'mentions'];
+const TRACK_PAGES = ['accueil', 'collection', 'p', 'histoire', 'pro', 'evenements', 'avis', 'videos', 'contact', 'devis', 'mentions'];
 const BOT_UA = /bot|crawl|spider|slurp|preview|facebookexternalhit|headless|lighthouse|monitor|curl|wget|python|httpclient/i;
 const REQUEST_STATUSES = ['nouveau', 'en cours', 'devis envoyé', 'confirmé', 'archivé'];
 
@@ -395,7 +398,10 @@ async function api(request, env, url, ctx) {
   const m = request.method;
 
   // ---- Public
-  if (p === '/api/catalogue' && m === 'GET') return catalogue(env);
+  if (p === '/api/catalogue' && m === 'GET') return catalogue(request, env);
+  if (p === '/api/pro/demande' && m === 'POST') return demandePro(request, env, url, ctx);
+  if (p === '/api/pro/login' && m === 'POST') return loginPro(request, env);
+  if (p === '/api/pro/logout' && m === 'POST') return json({ ok: true }, 200, { 'Set-Cookie': `${PRO_COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax` });
   if (p === '/api/requests' && m === 'POST') return createRequest(request, env, url, ctx);
   if (p === '/api/reviews' && m === 'POST') return createReview(request, env, url, ctx);
   if (p === '/api/track' && m === 'POST') return track(request, env);
@@ -456,6 +462,7 @@ async function adminApi(request, env, p, m) {
       version: APP_VERSION,
       gallery: gallery.results,
       pendingReviews: pending?.n || 0,
+      pendingPros: (await db.prepare("SELECT COUNT(*) AS n FROM pros WHERE status = 'en attente'").first())?.n || 0,
     });
   }
 
@@ -537,7 +544,9 @@ async function adminApi(request, env, p, m) {
       ]);
       const r = req.results[0];
       if (!r) return json({ error: 'Demande introuvable.' }, 404);
+      const pro = r.pro_id ? await db.prepare('SELECT company, siret, city, contact_name FROM pros WHERE id = ?').bind(r.pro_id).first() : null;
       return json({
+        pro,
         request: { ...r, items: safeJson(r.items, []), quote: safeJson(r.quote, null) },
         products: prods.results.map(x => ({ ...x, tiers: cleanTiers(x.tiers) })),
         settings: Object.fromEntries(sets.results.map(x => [x.key, x.value])),
@@ -603,6 +612,35 @@ async function adminApi(request, env, p, m) {
       return json({ ok: true });
     }
     if (m === 'DELETE') { await db.prepare('DELETE FROM gallery WHERE id = ?').bind(mt[1]).run(); return json({ ok: true }); }
+  }
+
+  // Professionnels : demandes d'accès et comptes
+  if (p === '/api/admin/pros' && m === 'GET') {
+    const r = await db.prepare("SELECT * FROM pros ORDER BY CASE status WHEN 'en attente' THEN 0 WHEN 'actif' THEN 1 ELSE 2 END, created_at DESC").all();
+    return json({ pros: r.results });
+  }
+  if (p === '/api/admin/pros' && m === 'POST') { // ajout manuel d'un client pro existant, accès créé tout de suite
+    const b = await request.json();
+    const company = clean(b.company, 120);
+    if (!company) return json({ error: 'Indiquez le nom de l’entreprise.' }, 400);
+    const code = await nouveauCode(db);
+    const r = await db.prepare(`INSERT INTO pros (company, siret, activity, contact_name, email, phone, city, code, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'actif')`)
+      .bind(company, clean(b.siret, 20), clean(b.activity, 60), clean(b.contact_name, 120), clean(b.email, 160), clean(b.phone, 40), clean(b.city, 80), code).run();
+    return json({ ok: true, id: r.meta.last_row_id, code });
+  }
+  if ((mt = p.match(/^\/api\/admin\/pros\/(\d+)$/))) {
+    if (m === 'PUT') {
+      const b = await request.json();
+      const pro = await db.prepare('SELECT * FROM pros WHERE id = ?').bind(mt[1]).first();
+      if (!pro) return json({ error: 'Professionnel introuvable.' }, 404);
+      if (b.status && !PRO_STATUSES.includes(b.status)) return json({ error: 'Statut inconnu.' }, 400);
+      // Activer sans code, ou demander un nouveau code : un code unique est créé (l'ancien ne fonctionne plus)
+      const code = (b.status === 'actif' && !pro.code) || b.nouveau_code ? await nouveauCode(db) : pro.code;
+      await db.prepare('UPDATE pros SET status = ?, code = ?, note = ? WHERE id = ?')
+        .bind(b.status || pro.status, code, 'note' in b ? clean(b.note, 1000) : pro.note, mt[1]).run();
+      return json({ ok: true, code });
+    }
+    if (m === 'DELETE') { await db.prepare('DELETE FROM pros WHERE id = ?').bind(mt[1]).run(); return json({ ok: true }); }
   }
 
   // Avis clients
@@ -673,15 +711,15 @@ async function adminApi(request, env, p, m) {
     const withMedia = new URL(request.url).searchParams.get('media') === '1';
     const q = sql => db.prepare(sql);
     const res = await db.batch([q('SELECT * FROM products ORDER BY position'), q('SELECT * FROM settings'), q('SELECT * FROM videos'),
-      q('SELECT * FROM gallery'), q('SELECT * FROM reviews'), q('SELECT * FROM requests'),
+      q('SELECT * FROM gallery'), q('SELECT * FROM reviews'), q('SELECT * FROM requests'), q('SELECT * FROM pros'),
       withMedia ? q('SELECT id, name, mime, size, data, created_at FROM media') : q('SELECT id FROM media WHERE 0'),
       withMedia ? q('SELECT * FROM file_meta') : q('SELECT id FROM file_meta WHERE 0'),
       withMedia ? q('SELECT id, idx, data FROM file_chunks ORDER BY id, idx') : q('SELECT id FROM file_chunks WHERE 0')]);
-    const [products, settings, videos, gallery, reviews, requests, media, file_meta, file_chunks] = res.map(r => r.results);
+    const [products, settings, videos, gallery, reviews, requests, pros, media, file_meta, file_chunks] = res.map(r => r.results);
     const b64 = buf => { const u = new Uint8Array(buf); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode(...u.subarray(i, i + 0x8000)); return btoa(s); };
     const body = {
       format: 'saveurs-des-rois-backup', version: 1, app: APP_VERSION, created_at: new Date().toISOString(),
-      tables: { products, settings: settings.filter(x => x.key !== 'schema_version'), videos, gallery, reviews, requests,
+      tables: { products, settings: settings.filter(x => x.key !== 'schema_version'), videos, gallery, reviews, requests, pros,
         media: media.map(x => ({ ...x, data: b64(x.data) })), file_meta, file_chunks: file_chunks.map(x => ({ ...x, data: b64(x.data) })) },
     };
     const day = parisDay(Date.now());
@@ -722,11 +760,21 @@ async function adminApi(request, env, p, m) {
   if (p === '/api/admin/stats' && m === 'GET') {
     const days = Math.min(365, Math.max(1, toInt(new URL(request.url).searchParams.get('days')) || 30));
     const since = parisDay(Date.now() - (days - 1) * 86400_000);
+    // Après une remise à zéro, les demandes antérieures ne sont plus comptées
+    const raz = (await db.prepare("SELECT value FROM settings WHERE key = 'stats_depuis'").first())?.value || '';
+    const depuisReq = raz > since ? raz : since;
     const [rows, reqs] = await db.batch([
       db.prepare('SELECT day, kind, key, n FROM stats WHERE day >= ? ORDER BY day').bind(since),
-      db.prepare("SELECT substr(created_at, 1, 10) AS day, kind, COUNT(*) AS n FROM requests WHERE created_at >= ? GROUP BY day, kind").bind(since),
+      db.prepare("SELECT substr(created_at, 1, 10) AS day, kind, (pro_id IS NOT NULL) AS pro, COUNT(*) AS n FROM requests WHERE created_at >= ? GROUP BY day, kind, pro").bind(depuisReq),
     ]);
-    return json({ since, days, rows: rows.results, requests: reqs.results });
+    return json({ since, days, raz, rows: rows.results, requests: reqs.results });
+  }
+  if (p === '/api/admin/stats' && m === 'DELETE') { // remise à zéro des compteurs (les demandes elles-mêmes sont conservées)
+    await db.batch([
+      db.prepare('DELETE FROM stats'),
+      db.prepare("INSERT INTO settings (key, value) VALUES ('stats_depuis', datetime('now')) ON CONFLICT(key) DO UPDATE SET value = excluded.value"),
+    ]);
+    return json({ ok: true });
   }
 
   return json({ error: 'Route admin inconnue.' }, 404);
@@ -734,8 +782,11 @@ async function adminApi(request, env, p, m) {
 
 /* ---------------------------------------------------------------- public */
 
-async function catalogue(env) {
+async function catalogue(request, env) {
   const db = env.DB;
+  // Les prix au kilo ne sont envoyés qu'aux professionnels connectés (et à l'administratrice)
+  const pro = await proSession(request, env);
+  const voitPro = Boolean(pro) || await isAuthed(request, env);
   const keys = PUBLIC_SETTINGS.map(() => '?').join(',');
   const [products, videos, settings, gallery, reviews] = await db.batch([
     db.prepare('SELECT * FROM products WHERE visible = 1 ORDER BY position, name'),
@@ -745,18 +796,25 @@ async function catalogue(env) {
     db.prepare("SELECT id, name, event_type, rating, text, reply, source, created_at FROM reviews WHERE status = 'publié' ORDER BY created_at DESC LIMIT 100"),
   ]);
   return json({
+    pro: pro ? { company: pro.company, contact_name: pro.contact_name } : null,
     gallery: gallery.results,
     reviews: reviews.results,
-    products: products.results.map(parseProduct),
+    products: products.results.map(parseProduct).map(x => {
+      if (voitPro) return x;
+      const vendKg = ['kg', 'both'].includes(x.price_mode) && x.price_kg_cents > 0;
+      const { price_kg_cents, min_kg, ...reste } = x;
+      return { ...reste, pro_dispo: vendKg }; // le public sait seulement qu'un tarif pro existe
+    }),
     videos: videos.results,
     settings: Object.fromEntries(settings.results.map(r => [r.key, r.value])),
-  }, 200, { 'Cache-Control': 'public, max-age=30' });
+  }, 200, { 'Cache-Control': 'private, no-store', 'Vary': 'Cookie' });
 }
 
 async function createRequest(request, env, url, ctx) {
   let body;
   try { body = await request.json(); } catch { return json({ error: 'Demande illisible.' }, 400); }
   if (body.website) return json({ ok: true }); // pot de miel anti-robots
+  const pro = await proSession(request, env);
   const name = clean(body.name, 120);
   const email = clean(body.email, 160);
   const phone = clean(body.phone, 40);
@@ -777,8 +835,8 @@ async function createRequest(request, env, url, ctx) {
       if (!prod) continue;
       const mode = prod.price_mode || 'piece';
       if (it.unit === 'kg') {
-        // Achat au poids (professionnels) : jamais de dégressivité
-        if (!['kg', 'both'].includes(mode) || !prod.price_kg_cents) continue;
+        // Achat au poids : réservé aux professionnels connectés, jamais de dégressivité
+        if (!pro || !['kg', 'both'].includes(mode) || !prod.price_kg_cents) continue;
         const qty = Math.round(Math.max(0, Math.min(500, toNum(it.qty) || 0)) * 10) / 10;
         if (!qty) continue;
         checked.push({ id: prod.id, name: prod.name, qty, unit: 'kg', unit_cents: prod.price_kg_cents, label: 'le kg' });
@@ -800,11 +858,12 @@ async function createRequest(request, env, url, ctx) {
     kind: body.kind === 'contact' ? 'contact' : 'devis', name, email, phone,
     event_date: clean(body.event_date, 20), event_type: clean(body.event_type, 60), delivery: clean(body.delivery, 60),
     message: clean(body.message, 3000), items: checked, estimate_cents: estimate,
+    pro_company: pro?.company || '',
   };
-  await env.DB.prepare(`INSERT INTO requests (kind, name, email, phone, event_date, event_type, delivery, message, items, estimate_cents)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(
+  await env.DB.prepare(`INSERT INTO requests (kind, name, email, phone, event_date, event_type, delivery, message, items, estimate_cents, pro_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(
     record.kind, name, email, phone, record.event_date, record.event_type, record.delivery,
-    record.message, JSON.stringify(checked), estimate,
+    record.message, JSON.stringify(checked), estimate, pro?.id ?? null,
   ).run();
 
   // Alerte envoyée en arrière-plan : le client n'attend pas, et un échec d'envoi ne bloque jamais sa demande
@@ -855,6 +914,73 @@ async function serveMedia(request, env, id) {
   return new Response(new Uint8Array(row.data), {
     headers: { 'Content-Type': row.mime, 'Cache-Control': 'public, max-age=31536000, immutable' },
   });
+}
+
+/* ---------------------------------------------------------------- espace professionnel */
+
+const PRO_COOKIE = 'sdr_pro';
+const PRO_STATUSES = ['en attente', 'actif', 'suspendu', 'refusé'];
+const PRO_JOURS = 365;
+
+// Code d'accès lisible : 8 caractères sans 0/O ni 1/I/L, affiché « ABCD-EFGH »
+async function nouveauCode(db) {
+  const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  for (;;) {
+    const r = crypto.getRandomValues(new Uint8Array(8));
+    const code = [...r].map(x => alphabet[x % alphabet.length]).join('');
+    if (!(await db.prepare('SELECT id FROM pros WHERE code = ?').bind(code).first())) return code;
+  }
+}
+const normCode = c => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 16);
+
+async function demandePro(request, env, url, ctx) {
+  let b;
+  try { b = await request.json(); } catch { return json({ error: 'Demande illisible.' }, 400); }
+  if (b.website) return json({ ok: true });
+  const d = {
+    company: clean(b.company, 120), siret: clean(b.siret, 20).replace(/\s/g, ''), activity: clean(b.activity, 60),
+    contact_name: clean(b.contact_name, 120), email: clean(b.email, 160), phone: clean(b.phone, 40),
+    city: clean(b.city, 80), volume: clean(b.volume, 200), message: clean(b.message, 2000),
+  };
+  if (!d.company) return json({ error: 'Indiquez le nom de votre entreprise.' }, 400);
+  if (!d.contact_name) return json({ error: 'Indiquez votre nom.' }, 400);
+  if (!d.email && !d.phone) return json({ error: 'Indiquez un e-mail ou un téléphone pour que nous puissions vous répondre.' }, 400);
+  if (d.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(d.email)) return json({ error: 'L’adresse e-mail semble incorrecte.' }, 400);
+  // SIRET facultatif et jamais bloquant : enregistré tel quel, vérifiable ensuite depuis l'admin
+  await env.DB.prepare(`INSERT INTO pros (company, siret, activity, contact_name, email, phone, city, volume, message) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(d.company, d.siret, d.activity, d.contact_name, d.email, d.phone, d.city, d.volume, d.message).run();
+  const alert = notify(env, { kind: 'acces_pro', name: d.contact_name, pro_company: d.company, ...d, items: [], estimate_cents: 0 }, url.origin)
+    .catch(err => console.error('Alerte pro non envoyée :', err.message));
+  if (ctx?.waitUntil) ctx.waitUntil(alert);
+  return json({ ok: true });
+}
+
+async function loginPro(request, env) {
+  const { code } = await request.json().catch(() => ({}));
+  const c = normCode(code);
+  const pro = c.length >= 6 ? await env.DB.prepare("SELECT * FROM pros WHERE code = ? AND status = 'actif'").bind(c).first() : null;
+  if (!pro) {
+    await new Promise(r => setTimeout(r, 900)); // ralentit les essais en série
+    return json({ error: 'Code inconnu ou désactivé. Vérifiez-le, ou contactez-nous.' }, 401);
+  }
+  await env.DB.prepare("UPDATE pros SET last_login = datetime('now') WHERE id = ?").bind(pro.id).run();
+  const exp = Date.now() + PRO_JOURS * 86400_000;
+  const token = `${pro.id}.${exp}.${await hmac(`pro:${pro.id}.${exp}.${pro.code}`, await sessionKey(env))}`;
+  return json({ ok: true, company: pro.company }, 200, {
+    'Set-Cookie': `${PRO_COOKIE}=${token}; Path=/; Max-Age=${PRO_JOURS * 86400}; HttpOnly; Secure; SameSite=Lax`,
+  });
+}
+
+// Session pro valide uniquement si le compte est toujours actif et que son code n'a pas changé
+async function proSession(request, env) {
+  if (!env.ADMIN_PASSWORD) return null;
+  const m = (request.headers.get('Cookie') || '').match(new RegExp(`${PRO_COOKIE}=([^;]+)`));
+  if (!m) return null;
+  const [id, exp, sig] = m[1].split('.');
+  if (!id || !exp || !sig || Number(exp) < Date.now()) return null;
+  const pro = await env.DB.prepare("SELECT id, company, contact_name, code FROM pros WHERE id = ? AND status = 'actif'").bind(id).first();
+  if (!pro) return null;
+  return (await safeEqual(sig, await hmac(`pro:${pro.id}.${exp}.${pro.code}`, await sessionKey(env)))) ? pro : null;
 }
 
 /* ---------------------------------------------------------------- avis & audience */
@@ -921,12 +1047,16 @@ function alertChannels(env) {
 
 async function notify(env, r, origin) {
   const channels = alertChannels(env);
-  const label = r.kind === 'avis' ? 'Nouvel avis client à valider' : r.kind === 'contact' ? 'Nouveau message' : 'Nouvelle demande de devis';
+  const label = r.kind === 'acces_pro' ? 'Nouvelle demande d’accès professionnel'
+    : r.kind === 'avis' ? 'Nouvel avis client à valider'
+    : r.kind === 'contact' ? (r.pro_company ? 'Nouveau message PRO' : 'Nouveau message')
+    : r.pro_company ? 'Nouvelle demande de devis PRO' : 'Nouvelle demande de devis';
   const fmt = c => (c / 100).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
   const qtyTxt = i => i.unit === 'kg' ? `${String(i.qty).replace('.', ',')} kg de` : `${i.qty} ×`;
   const lines = r.items.map(i => `${qtyTxt(i)} ${i.name} (${i.unit_cents ? fmt(i.unit_cents) + ' ' : ''}${i.label || ''})`);
   const details = [
     r.rating && `Note : ${'★'.repeat(r.rating)}${'☆'.repeat(5 - r.rating)}`,
+    r.pro_company && `Entreprise : ${r.pro_company}`, r.siret && `SIRET : ${r.siret}`, r.activity && `Activité : ${r.activity}`, r.city && `Ville : ${r.city}`, r.volume && `Volumes : ${r.volume}`,
     r.phone && `Téléphone : ${r.phone}`, r.email && `E-mail : ${r.email}`,
     r.event_type && `Occasion : ${r.event_type}`, r.event_date && `Date : ${r.event_date}`, r.delivery && `Retrait / livraison : ${r.delivery}`,
   ].filter(Boolean);

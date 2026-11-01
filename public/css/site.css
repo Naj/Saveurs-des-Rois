@@ -416,3 +416,37 @@ table.nutri td { text-align: right; font-variant-numeric: tabular-nums lining-nu
 .carte-dl p { font-size: clamp(1.2rem, 2.4vw, 1.45rem); font-style: italic; color: var(--encre-douce); margin: 0 0 1rem; }
 .carte-dl .btn { font-size: 1.02rem; min-height: 52px; padding: .7rem 2rem; }
 .foot a[data-carte] { font-size: 1.1rem; color: var(--or-clair); }
+
+/* ================= Espace professionnel ================= */
+.nav .nav__pro { color: var(--or-clair); }
+.btn--ligne-sombre { background: transparent; color: var(--encre); border-color: var(--encre); }
+.btn--ligne-sombre:hover { background: rgba(0,0,0,.05); }
+.pro-haut { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: clamp(1.5rem, 4vw, 3rem); align-items: start; margin-bottom: 2.5rem; }
+.pro-atouts { list-style: none; margin: 0; padding: 0; display: grid; gap: 1rem; }
+.pro-atouts li { padding-left: 2rem; position: relative; font-size: 1.15rem; }
+.pro-atouts li::before { content: "◆"; position: absolute; left: 0; top: .05em; color: var(--or-profond); }
+.pro-code h2, .pro-demande h2 { font-size: 1.3rem; }
+.pro-demande { max-width: 46rem; margin-inline: auto; }
+.pro-actions { display: flex; flex-wrap: wrap; gap: .8rem 1.2rem; align-items: center; margin-bottom: 1.8rem; }
+.pro-liste { display: grid; gap: .8rem; }
+.pro-ligne { display: grid; grid-template-columns: 64px minmax(0, 2fr) minmax(0, 1.3fr) auto; gap: 1rem; align-items: center; background: #fff; border: 1px solid var(--amande); border-radius: 16px; padding: .8rem 1rem; }
+.pro-ligne img { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; border: 3px solid var(--amande); }
+.pro-ligne h3 { font-size: 1.1rem; margin: 0; }
+.pro-ligne h3 a { color: inherit; text-decoration: none; }
+.pro-ligne .carte__ar { margin: 0; text-align: left; min-height: 0; }
+.pro-ligne__prix { font-size: 1.05rem; }
+.pro-ligne__prix strong { font-family: var(--f-titre); font-size: 1.2rem; }
+.pro-ligne__prix span { color: var(--encre-douce); font-size: .95rem; }
+.pro-ligne .ajout { flex-wrap: nowrap; }
+.pro-ligne .ajout .btn { min-height: 44px; padding: .4rem 1rem; }
+.tarif--verrou { background: #f6ecd2; border-radius: 16px; padding: 1.1rem 1.2rem; border: 1px dashed var(--or-profond); margin-top: 1rem; }
+.tarif--verrou p { margin: .2rem 0 .8rem; }
+.badge-pro-devis { display: inline-block; background: var(--nuit); color: var(--or); font: 600 .85rem var(--f-titre); letter-spacing: .05em; padding: .35rem 1rem; border-radius: 999px; font-style: normal !important; }
+@media (max-width: 860px) { .pro-haut { grid-template-columns: 1fr; } }
+@media (max-width: 700px) {
+  .pro-ligne { grid-template-columns: 56px 1fr; }
+  .pro-ligne img { width: 56px; height: 56px; }
+  .pro-ligne__prix, .pro-ligne .ajout { grid-column: 1 / -1; }
+  .pro-ligne .ajout { flex-wrap: wrap; }
+}
+.facultatif { font-weight: 400; font-style: italic; color: var(--encre-douce); font-size: .92em; }

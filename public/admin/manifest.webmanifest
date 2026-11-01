@@ -15,8 +15,8 @@
     { "src": "/assets/img/admin-icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
   "shortcuts": [
-    { "name": "Demandes de devis", "url": "/admin/#demandes", "icons": [{ "src": "/assets/img/admin-icon-192.png", "sizes": "192x192" }] },
-    { "name": "Produits", "url": "/admin/#produits", "icons": [{ "src": "/assets/img/admin-icon-192.png", "sizes": "192x192" }] },
+    { "name": "Demandes particuliers", "url": "/admin/#demandes", "icons": [{ "src": "/assets/img/admin-icon-192.png", "sizes": "192x192" }] },
+    { "name": "Professionnels", "url": "/admin/#pros", "icons": [{ "src": "/assets/img/admin-icon-192.png", "sizes": "192x192" }] },
     { "name": "Statistiques", "url": "/admin/#stats", "icons": [{ "src": "/assets/img/admin-icon-192.png", "sizes": "192x192" }] }
   ]
 }

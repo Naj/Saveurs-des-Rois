@@ -193,3 +193,14 @@ button.adm-alerte { border: 0; font: inherit; font-size: .95rem; cursor: pointer
 .adm-mode--large { margin-bottom: .6rem; }
 .adm-mode--large small { font-size: .95rem; }
 @media (max-width: 600px) { .adm-tete .adm-out { padding: .3rem .6rem; font-size: .7rem; } }
+
+/* ================= Professionnels ================= */
+.adm-h2 { font-size: 1.2rem; margin: 1.4rem 0 .7rem; display: flex; gap: .5rem; align-items: center; }
+.adm-statut { font: 600 .72rem var(--f-titre); letter-spacing: .04em; padding: .15rem .6rem; border-radius: 999px; background: #efe6d2; color: var(--encre-douce); vertical-align: middle; margin-left: .3rem; }
+.adm-statut--actif { background: #e4efe0; color: var(--ok); }
+.adm-statut--en-attente { background: #f6ecd2; color: var(--or-profond); }
+.adm-statut--refuse, .adm-statut--suspendu { background: #f7e3e1; color: var(--err); }
+.adm-code { font-size: 1.05rem; margin: .4rem 0; }
+.adm-code strong { font-family: ui-monospace, Menlo, Consolas, monospace; letter-spacing: .12em; background: var(--nuit); color: var(--or); padding: .15rem .6rem; border-radius: 6px; }
+.adm-pro-fiche .adm-actions + .adm-actions { margin-top: .4rem; }
+.adm-kpi small { font: 400 .8rem var(--f-texte); color: var(--amande); }

@@ -132,11 +132,21 @@
       opts.tarifs && tableauTarifs(produits, s),
       ...(opts.fiches ? produits.map(p => fiche(p, s)) : []),
     ].filter(Boolean).join('') || '<p class="chargement">Cochez au moins un élément à inclure.</p>';
-    if (proSeul() && !produits.length) $('#carte').innerHTML = '<p class="chargement">Aucune pâtisserie n’a de prix au kilo. Renseignez-le dans l’admin (Produits → Prix → « Au kilo » ou « Les deux »).</p>';
+    if (proSeul() && !produits.length) {
+      const reserve = (D.products || []).some(p => p.pro_dispo);
+      $('#carte').innerHTML = reserve
+        ? '<div class="reserve"><img src="/assets/img/logo-transparent.webp" alt=""><h2>Tarifs réservés aux professionnels</h2><p>Les prix au kilo sont accessibles avec votre code d’accès professionnel.</p><a class="b b--or" href="/#/pro">Accéder à l’Espace pro</a></div>'
+        : '<p class="chargement">Aucune pâtisserie n’a de prix au kilo. Renseignez-le dans l’admin (Produits → Prix → « Au kilo » ou « Les deux »).</p>';
+    }
     document.title = `${proSeul() ? 'Tarifs professionnels' : 'La carte'} — Saveurs des Rois (${new Date().toLocaleDateString('fr-FR')})`;
   }
 
   $('#public').value = opts.public;
+  const majChoix = () => { // sans accès pro, seule la carte particuliers est proposée
+    const pro = (D?.products || []).some(p => p.price_kg_cents > 0);
+    $('#public').querySelectorAll('option:not([value="part"])').forEach(o => { o.hidden = !pro; o.disabled = !pro; });
+    if (!pro && opts.public === 'tous') { opts.public = 'part'; $('#public').value = 'part'; }
+  };
   $('#public').addEventListener('change', e => {
     opts.public = e.target.value;
     const u = new URL(location.href);
@@ -163,6 +173,7 @@
     } catch {
       D = window.SDR_FALLBACK || { products: [], settings: {} };
     }
+    majChoix();
     rendu();
   })();
 })();
