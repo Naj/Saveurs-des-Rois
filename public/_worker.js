@@ -11,7 +11,7 @@
 /* ============================== Base de données : structure et contenu initial ============================== */
 
 
-const SCHEMA_VERSION = '9';
+const SCHEMA_VERSION = '12';
 
 // Colonnes ajoutées après la première version (ajoutées une à une, sans rien effacer)
 const ADD_COLUMNS = [
@@ -21,6 +21,13 @@ const ADD_COLUMNS = [
   'ALTER TABLE requests ADD COLUMN quote TEXT',                        // devis PDF enregistré (JSON)
   'ALTER TABLE products ADD COLUMN tiers TEXT',                        // grille dégressive : [{min, price_cents}]
   'ALTER TABLE requests ADD COLUMN pro_id INTEGER',                    // demande envoyée par un client professionnel
+  'ALTER TABLE invoices ADD COLUMN sent_at TEXT',                      // dernier envoi de la facture par e-mail depuis le site
+  'ALTER TABLE invoices ADD COLUMN sent_to TEXT',
+  'ALTER TABLE requests ADD COLUMN quote_sent_at TEXT',                // devis envoyé par e-mail depuis le site
+  'ALTER TABLE requests ADD COLUMN quote_sent_to TEXT',
+  'ALTER TABLE requests ADD COLUMN accepted_at TEXT',                  // devis accepté en ligne par le client
+  'ALTER TABLE requests ADD COLUMN accepted_name TEXT',
+  'ALTER TABLE requests ADD COLUMN accepted_quote TEXT',               // copie du devis tel qu'accepté
 ];
 
 const SCHEMA = [
@@ -37,6 +44,11 @@ const SCHEMA = [
   "CREATE TABLE IF NOT EXISTS stats ( day TEXT NOT NULL, kind TEXT NOT NULL, key TEXT NOT NULL DEFAULT '', n INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (day, kind, key) )",
   "CREATE TABLE IF NOT EXISTS file_meta ( id TEXT PRIMARY KEY, name TEXT, mime TEXT, size INTEGER, chunks INTEGER, updated_at TEXT DEFAULT (datetime('now')) )",
   "CREATE TABLE IF NOT EXISTS file_chunks ( id TEXT NOT NULL, idx INTEGER NOT NULL, data BLOB NOT NULL, PRIMARY KEY (id, idx) )",
+  "CREATE TABLE IF NOT EXISTS invoices ( id INTEGER PRIMARY KEY AUTOINCREMENT, number TEXT UNIQUE, type TEXT NOT NULL DEFAULT 'facture', status TEXT NOT NULL DEFAULT 'brouillon', request_ids TEXT DEFAULT '[]', pro_id INTEGER, parent_id INTEGER, is_pro INTEGER DEFAULT 0, client TEXT DEFAULT '{}', lines TEXT DEFAULT '[]', total_cents INTEGER DEFAULT 0, deduct_cents INTEGER DEFAULT 0, issue_date TEXT, sale_date TEXT, due_date TEXT, object TEXT, quote_ref TEXT, notes TEXT, payment_link TEXT, sumup_checkout_id TEXT, reminders INTEGER DEFAULT 0, last_reminder_at TEXT, source TEXT DEFAULT 'site', import_batch TEXT, created_at TEXT DEFAULT (datetime('now')), validated_at TEXT )",
+  "CREATE INDEX IF NOT EXISTS idx_invoices_date ON invoices(issue_date)",
+  "CREATE TABLE IF NOT EXISTS payments ( id INTEGER PRIMARY KEY AUTOINCREMENT, invoice_id INTEGER NOT NULL, date TEXT NOT NULL, amount_cents INTEGER NOT NULL, method TEXT, ref TEXT, note TEXT, import_batch TEXT, created_at TEXT DEFAULT (datetime('now')) )",
+  "CREATE INDEX IF NOT EXISTS idx_payments_inv ON payments(invoice_id)",
+  "CREATE TABLE IF NOT EXISTS expenses ( id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT NOT NULL, supplier TEXT, category TEXT, label TEXT, amount_cents INTEGER NOT NULL, method TEXT, note TEXT, import_batch TEXT, created_at TEXT DEFAULT (datetime('now')) )",
   "CREATE TABLE IF NOT EXISTS pros ( id INTEGER PRIMARY KEY AUTOINCREMENT, company TEXT NOT NULL, siret TEXT, activity TEXT, contact_name TEXT, email TEXT, phone TEXT, city TEXT, volume TEXT, message TEXT, code TEXT UNIQUE, status TEXT DEFAULT 'en attente', note TEXT, created_at TEXT DEFAULT (datetime('now')), last_login TEXT )"
 ];
 
@@ -302,7 +314,10 @@ const PRICE_MODES = ['piece', 'kg', 'both', 'devis'];
 const VIDEO_FIELDS = ['title', 'description', 'url', 'poster', 'product_id', 'visible', 'position'];
 // Réglages privés (devis) : modifiables dans l'admin, jamais renvoyés au site public
 const QUOTE_SETTINGS = ['company_name', 'company_owner', 'company_siret', 'company_address', 'company_phone', 'company_email',
-  'quote_validity', 'quote_payment', 'quote_legal', 'quote_footer'];
+  'quote_validity', 'quote_payment', 'quote_legal', 'quote_footer',
+  // Facturation
+  'invoice_terms', 'invoice_terms_pro', 'invoice_due_days_pro', 'invoice_late_text', 'invoice_footer', 'invoice_next',
+  'company_iban', 'company_bic', 'sumup_link', 'social_rate', 'ca_ceiling', 'vat_threshold'];
 // Fichiers volumineux (musique, carte PDF) découpés en morceaux de 1,5 Mo dans D1
 const FILES = {
   musique: { types: /^audio\/(mpeg|mp3|mp4|x-m4a|m4a|aac|ogg|wav|x-wav|webm)$/, max: 15_000_000, label: 'un fichier audio (MP3, M4A, OGG)' },
@@ -314,7 +329,7 @@ const PUBLIC_SETTINGS = ['carte_mode',
   'contact_phone', 'contact_whatsapp', 'contact_email', 'contact_instagram', 'contact_facebook',
   'contact_tiktok', 'contact_zone', 'contact_hours', 'music_url', 'legal_text',
 ];
-const APP_VERSION = '3.4';
+const APP_VERSION = '3.7';
 // Colonnes restaurées depuis une sauvegarde (les colonnes inconnues sont ignorées)
 const RESTORE_COLUMNS = {
   products: ['id', 'name', 'arabic_name', 'tagline', 'description', 'price_cents', 'price_label', 'threshold', 'ingredients', 'allergens', 'traces',
@@ -324,7 +339,13 @@ const RESTORE_COLUMNS = {
   videos: ['id', 'title', 'description', 'url', 'poster', 'product_id', 'visible', 'position', 'created_at'],
   gallery: ['id', 'image', 'title', 'event_type', 'caption', 'visible', 'position', 'created_at'],
   reviews: ['id', 'name', 'event_type', 'rating', 'text', 'reply', 'source', 'status', 'event_date', 'created_at'],
-  requests: ['id', 'kind', 'name', 'email', 'phone', 'event_date', 'event_type', 'delivery', 'message', 'items', 'estimate_cents', 'status', 'created_at', 'quote', 'pro_id'],
+  requests: ['id', 'kind', 'name', 'email', 'phone', 'event_date', 'event_type', 'delivery', 'message', 'items', 'estimate_cents', 'status', 'created_at', 'quote', 'pro_id',
+    'quote_sent_at', 'quote_sent_to', 'accepted_at', 'accepted_name', 'accepted_quote'],
+  invoices: ['id', 'number', 'type', 'status', 'request_ids', 'pro_id', 'parent_id', 'is_pro', 'client', 'lines', 'total_cents', 'deduct_cents',
+    'issue_date', 'sale_date', 'due_date', 'object', 'quote_ref', 'notes', 'payment_link', 'sumup_checkout_id', 'reminders', 'last_reminder_at',
+    'source', 'import_batch', 'created_at', 'validated_at', 'sent_at', 'sent_to'],
+  payments: ['id', 'invoice_id', 'date', 'amount_cents', 'method', 'ref', 'note', 'import_batch', 'created_at'],
+  expenses: ['id', 'date', 'supplier', 'category', 'label', 'amount_cents', 'method', 'note', 'import_batch', 'created_at'],
   pros: ['id', 'company', 'siret', 'activity', 'contact_name', 'email', 'phone', 'city', 'volume', 'message', 'code', 'status', 'note', 'created_at', 'last_login'],
   media: ['id', 'name', 'mime', 'size', 'data', 'created_at'],
   file_meta: ['id', 'name', 'mime', 'size', 'chunks', 'updated_at'],
@@ -405,6 +426,10 @@ async function api(request, env, url, ctx) {
   if (p === '/api/requests' && m === 'POST') return createRequest(request, env, url, ctx);
   if (p === '/api/reviews' && m === 'POST') return createReview(request, env, url, ctx);
   if (p === '/api/track' && m === 'POST') return track(request, env);
+  const dv = p.match(/^\/api\/devis\/(\d+)\/([\w-]{20,60})$/);
+  if (dv) return accepterDevis(request, env, url, ctx, +dv[1], dv[2]);
+  const pay = p.match(/^\/api\/payer\/(\d+)\/([\w-]{20,60})(\/retour)?$/);
+  if (pay) return payerFacture(request, env, url, +pay[1], pay[2], Boolean(pay[3]));
 
   // ---- Auth
   if (p === '/api/admin/login' && m === 'POST') return login(request, env);
@@ -460,6 +485,8 @@ async function adminApi(request, env, p, m) {
         from: env.ALERT_FROM || '',
       },
       version: APP_VERSION,
+      sumup: { api: Boolean(env.SUMUP_API_KEY && env.SUMUP_MERCHANT_CODE) },
+      mail: etatMail(env),
       gallery: gallery.results,
       pendingReviews: pending?.n || 0,
       pendingPros: (await db.prepare("SELECT COUNT(*) AS n FROM pros WHERE status = 'en attente'").first())?.n || 0,
@@ -546,8 +573,8 @@ async function adminApi(request, env, p, m) {
       if (!r) return json({ error: 'Demande introuvable.' }, 404);
       const pro = r.pro_id ? await db.prepare('SELECT company, siret, city, contact_name FROM pros WHERE id = ?').bind(r.pro_id).first() : null;
       return json({
-        pro,
-        request: { ...r, items: safeJson(r.items, []), quote: safeJson(r.quote, null) },
+        pro, mail: etatMail(env), acceptLink: await lienDevis(env, new URL(request.url).origin, r.id),
+        request: { ...r, items: safeJson(r.items, []), quote: safeJson(r.quote, null), accepted_quote: safeJson(r.accepted_quote, null) },
         products: prods.results.map(x => ({ ...x, tiers: cleanTiers(x.tiers) })),
         settings: Object.fromEntries(sets.results.map(x => [x.key, x.value])),
       });
@@ -559,6 +586,10 @@ async function adminApi(request, env, p, m) {
       await db.prepare('UPDATE requests SET quote = ? WHERE id = ?').bind(body, mt[1]).run();
       return json({ ok: true });
     }
+  }
+  if ((mt = p.match(/^\/api\/admin\/requests\/(\d+)\/quote-email$/)) && m === 'POST') {
+    try { return json(await envoyerDevis(request, env, +mt[1])); }
+    catch (e) { if (e instanceof Erreur) return json({ error: e.message }, e.status); throw e; }
   }
   if ((mt = p.match(/^\/api\/admin\/requests\/(\d+)$/))) {
     if (m === 'PUT') {
@@ -712,14 +743,15 @@ async function adminApi(request, env, p, m) {
     const q = sql => db.prepare(sql);
     const res = await db.batch([q('SELECT * FROM products ORDER BY position'), q('SELECT * FROM settings'), q('SELECT * FROM videos'),
       q('SELECT * FROM gallery'), q('SELECT * FROM reviews'), q('SELECT * FROM requests'), q('SELECT * FROM pros'),
+      q('SELECT * FROM invoices'), q('SELECT * FROM payments'), q('SELECT * FROM expenses'),
       withMedia ? q('SELECT id, name, mime, size, data, created_at FROM media') : q('SELECT id FROM media WHERE 0'),
       withMedia ? q('SELECT * FROM file_meta') : q('SELECT id FROM file_meta WHERE 0'),
       withMedia ? q('SELECT id, idx, data FROM file_chunks ORDER BY id, idx') : q('SELECT id FROM file_chunks WHERE 0')]);
-    const [products, settings, videos, gallery, reviews, requests, pros, media, file_meta, file_chunks] = res.map(r => r.results);
+    const [products, settings, videos, gallery, reviews, requests, pros, invoices, payments, expenses, media, file_meta, file_chunks] = res.map(r => r.results);
     const b64 = buf => { const u = new Uint8Array(buf); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode(...u.subarray(i, i + 0x8000)); return btoa(s); };
     const body = {
       format: 'saveurs-des-rois-backup', version: 1, app: APP_VERSION, created_at: new Date().toISOString(),
-      tables: { products, settings: settings.filter(x => x.key !== 'schema_version'), videos, gallery, reviews, requests, pros,
+      tables: { products, settings: settings.filter(x => x.key !== 'schema_version'), videos, gallery, reviews, requests, pros, invoices, payments, expenses,
         media: media.map(x => ({ ...x, data: b64(x.data) })), file_meta, file_chunks: file_chunks.map(x => ({ ...x, data: b64(x.data) })) },
     };
     const day = parisDay(Date.now());
@@ -776,6 +808,9 @@ async function adminApi(request, env, p, m) {
     ]);
     return json({ ok: true });
   }
+
+  const fact = await facturationApi(request, env, p, m);
+  if (fact) return fact;
 
   return json({ error: 'Route admin inconnue.' }, 404);
 }
@@ -1047,7 +1082,9 @@ function alertChannels(env) {
 
 async function notify(env, r, origin) {
   const channels = alertChannels(env);
-  const label = r.kind === 'acces_pro' ? 'Nouvelle demande d’accès professionnel'
+  const label = r.kind === 'devis_accepte' ? 'Devis accepté en ligne'
+    : r.kind === 'paiement' ? 'Paiement en ligne reçu'
+    : r.kind === 'acces_pro' ? 'Nouvelle demande d’accès professionnel'
     : r.kind === 'avis' ? 'Nouvel avis client à valider'
     : r.kind === 'contact' ? (r.pro_company ? 'Nouveau message PRO' : 'Nouveau message')
     : r.pro_company ? 'Nouvelle demande de devis PRO' : 'Nouvelle demande de devis';
@@ -1096,6 +1133,750 @@ async function notify(env, r, origin) {
   }
 
   return Promise.all(tasks.map(t => t.catch(err => ({ channel: '?', ok: false, error: err.message }))));
+}
+
+/* ---------------------------------------------------------------- facturation */
+
+// Factures : brouillon modifiable, puis « validée » (numéro définitif, plus jamais modifiée ; une erreur se corrige par un avoir).
+// Numérotation continue par année : FA-AAAA-0001 (factures, acomptes, soldes) et AV-AAAA-0001 (avoirs).
+const INVOICE_TYPES = ['facture', 'acompte', 'solde', 'avoir'];
+const UNITES = ['pc', 'kg', ''];
+
+function lignesPropres(l) {
+  if (!Array.isArray(l)) return [];
+  return l.slice(0, 80).map(x => ({
+    label: clean(x?.label, 200), detail: clean(x?.detail, 300),
+    qty: Math.round((toNum(x?.qty) ?? 0) * 1000) / 1000,
+    unit: UNITES.includes(x?.unit) ? x.unit : '',
+    prix: toInt(x?.prix) ?? 0,
+  })).filter(x => x.label || x.qty || x.prix);
+}
+function clientPropre(c) {
+  const o = {};
+  for (const k of ['nom', 'societe', 'siret', 'adresse', 'tel', 'email']) o[k] = clean(c?.[k], k === 'adresse' ? 300 : 160);
+  return o;
+}
+const totalLignes = l => l.reduce((t, x) => t + Math.round(x.qty * x.prix), 0);
+const isoDay = v => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : null);
+function addDays(iso, n) { const d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+const frDay = iso => (iso ? new Date(iso + 'T12:00:00Z').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }) : '');
+const eur = c => ((c || 0) / 100).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
+const sumupApi = env => Boolean(env.SUMUP_API_KEY && env.SUMUP_MERCHANT_CODE);
+async function lireReglages(db) {
+  return Object.fromEntries((await db.prepare('SELECT key, value FROM settings').all()).results.map(r => [r.key, r.value]));
+}
+function parseInvoice(i) {
+  return { ...i, client: safeJson(i.client, {}), lines: safeJson(i.lines, []), request_ids: safeJson(i.request_ids, []) };
+}
+
+// Lignes de facture reprises du devis enregistré (sinon de la demande du client)
+function lignesDevis(req) {
+  const numero = `DEV-${(req.created_at || '').slice(0, 4) || new Date().getFullYear()}-${String(req.id).padStart(4, '0')}`;
+  const q = safeJson(req.quote, null);
+  if (q?.lignes?.length) {
+    const lignes = q.lignes.map(l => ({ label: l.label, detail: l.detail, qty: l.qty, unit: l.kg ? 'kg' : l.s === 'frais' ? '' : 'pc', prix: l.prix }));
+    const part = q.lignes.filter(l => l.s === 'part').reduce((t, l) => t + Math.round(l.qty * l.prix), 0);
+    const remise = Math.round(part * (q.remise || 0) / 100);
+    if (remise) lignes.push({ label: `Remise ${String(q.remise).replace('.', ',')} %`, detail: '', qty: 1, unit: '', prix: -remise });
+    return { lignes: lignesPropres(lignes), numero: q.numero || numero, acompte_pct: toNum(q.acompte) || 0, client: q.client || null };
+  }
+  const items = safeJson(req.items, []);
+  return {
+    lignes: lignesPropres(items.map(i => ({ label: i.name, detail: '', qty: i.qty, unit: i.unit === 'kg' ? 'kg' : 'pc', prix: i.unit_cents }))),
+    numero, acompte_pct: 0, client: null,
+  };
+}
+
+async function creerFacture(db, b) {
+  const S = await lireReglages(db);
+  const today = parisDay(Date.now());
+  const inv = { type: 'facture', request_ids: [], pro_id: null, parent_id: null, is_pro: 0, client: {}, lines: [], deduct_cents: 0,
+    object: '', quote_ref: '', notes: '', sale_date: today };
+  let paiement = null;
+
+  if (b.mode === 'demande' || b.mode === 'groupe') {
+    const ids = (b.mode === 'demande' ? [b.request_id] : b.request_ids || []).map(toInt).filter(Boolean).slice(0, 60);
+    if (!ids.length) throw new Erreur('Choisissez au moins une commande.');
+    const reqs = (await db.prepare(`SELECT * FROM requests WHERE id IN (${ids.map(() => '?').join(',')}) ORDER BY created_at`).bind(...ids).all()).results;
+    if (!reqs.length) throw new Erreur('Demande introuvable.');
+    const first = reqs[0];
+    if (reqs.some(r => (r.pro_id || null) !== (first.pro_id || null))) throw new Erreur('Les commandes regroupées doivent appartenir au même client.');
+    const pro = first.pro_id ? await db.prepare('SELECT * FROM pros WHERE id = ?').bind(first.pro_id).first() : null;
+    const d0 = lignesDevis(first);
+    inv.pro_id = first.pro_id || null;
+    inv.is_pro = pro ? 1 : 0;
+    inv.request_ids = reqs.map(r => r.id);
+    inv.client = clientPropre({
+      nom: d0.client?.nom || first.name, societe: d0.client?.societe || pro?.company || '', siret: d0.client?.siret || pro?.siret || '',
+      adresse: d0.client?.adresse || pro?.city || '', tel: d0.client?.tel || first.phone, email: d0.client?.email || first.email,
+    });
+    if (isoDay(first.event_date)) inv.sale_date = first.event_date;
+
+    if (b.mode === 'groupe') {
+      for (const r of reqs) {
+        const d = lignesDevis(r);
+        const quand = isoDay(r.event_date) ? frDay(r.event_date) : frDay(r.created_at.slice(0, 10));
+        inv.lines.push(...d.lignes.map(l => ({ ...l, detail: [`Commande du ${quand} (${d.numero})`, l.detail].filter(Boolean).join(' · ') })));
+      }
+      inv.object = clean(b.label, 120) || 'Facture récapitulative de vos commandes';
+      inv.quote_ref = reqs.map(r => lignesDevis(r).numero).join(', ').slice(0, 300);
+      inv.sale_date = reqs.map(r => isoDay(r.event_date) || r.created_at.slice(0, 10)).sort().at(-1);
+    } else {
+      const type = ['acompte', 'facture', 'solde'].includes(b.type) ? b.type : 'facture';
+      const total = totalLignes(d0.lignes);
+      inv.type = type;
+      inv.quote_ref = d0.numero;
+      inv.object = [first.event_type, isoDay(first.event_date) && `le ${frDay(first.event_date)}`, first.delivery].filter(Boolean).join(' · ');
+      const acompte = toInt(b.deposit_cents) || 0;
+      if (type === 'acompte') {
+        if (!(acompte > 0)) throw new Erreur('Indiquez le montant de l’acompte.');
+        if (acompte > total) throw new Erreur('L’acompte dépasse le montant du devis.');
+        inv.lines = [{ label: `Acompte sur le devis ${d0.numero}`, detail: `${Math.round(acompte / total * 100)} % de ${eur(total)}${inv.object ? ' · ' + inv.object : ''}`, qty: 1, unit: '', prix: acompte }];
+        inv.sale_date = today; // l'acompte est facturé à sa réception
+      } else {
+        inv.lines = d0.lignes;
+        if (type === 'solde') {
+          const ac = (await db.prepare(`SELECT id, number, total_cents FROM invoices WHERE type = 'acompte' AND status = 'validée'
+            AND EXISTS (SELECT 1 FROM json_each(invoices.request_ids) WHERE value = ?) ORDER BY id`).bind(first.id).all()).results;
+          if (!ac.length) throw new Erreur('Aucune facture d’acompte validée pour ce devis : créez plutôt une facture complète.');
+          inv.deduct_cents = ac.reduce((t, a) => t + a.total_cents, 0);
+          inv.parent_id = ac.at(-1).id;
+        }
+      }
+      // Acompte reçu (facture d'acompte) ou encaissé sans facture d'acompte (facture complète, acompte déduit du reste à payer)
+      if (b.paid && acompte > 0 && type !== 'solde') {
+        paiement = { date: isoDay(b.paid.date) || today, amount_cents: acompte, method: clean(b.paid.method, 40) || 'Autre', note: type === 'facture' ? 'Acompte reçu à la commande' : '' };
+      }
+      await db.prepare("UPDATE requests SET status = 'confirmé' WHERE id = ? AND status NOT IN ('confirmé', 'archivé')").bind(first.id).run();
+    }
+  } else if (b.mode === 'avoir') {
+    const parent = await db.prepare("SELECT * FROM invoices WHERE id = ? AND status = 'validée'").bind(toInt(b.parent_id)).first();
+    if (!parent || parent.type === 'avoir') throw new Erreur('Choisissez une facture validée.');
+    const P = parseInvoice(parent);
+    Object.assign(inv, {
+      type: 'avoir', parent_id: P.id, pro_id: P.pro_id, is_pro: P.is_pro, client: P.client, request_ids: P.request_ids, quote_ref: P.quote_ref,
+      object: `Avoir sur la facture ${P.number}`, sale_date: P.sale_date || today,
+      lines: [{ label: `Annulation de la facture ${P.number} du ${frDay(P.issue_date)}`, detail: 'À ajuster en cas d’avoir partiel', qty: 1, unit: '', prix: P.total_cents - P.deduct_cents }],
+    });
+  } else {
+    inv.is_pro = b.is_pro ? 1 : 0;
+    inv.pro_id = toInt(b.pro_id);
+    if (inv.pro_id) {
+      const pro = await db.prepare('SELECT * FROM pros WHERE id = ?').bind(inv.pro_id).first();
+      if (pro) { inv.is_pro = 1; inv.client = clientPropre({ nom: pro.contact_name, societe: pro.company, siret: pro.siret, adresse: pro.city, tel: pro.phone, email: pro.email }); }
+    }
+    if (b.client) inv.client = clientPropre(b.client);
+    inv.lines = lignesPropres(b.lines);
+    if (!inv.lines.length) inv.lines = [{ label: '', detail: '', qty: 1, unit: 'pc', prix: 0 }];
+  }
+
+  const jours = toInt(S.invoice_due_days_pro) ?? 30;
+  const due = inv.is_pro && inv.type !== 'avoir' ? addDays(today, jours) : today;
+  const total = (inv.type === 'avoir' ? -1 : 1) * Math.abs(totalLignes(inv.lines));
+  const r = await db.prepare(`INSERT INTO invoices (type, status, request_ids, pro_id, parent_id, is_pro, client, lines, total_cents, deduct_cents,
+      issue_date, sale_date, due_date, object, quote_ref, notes) VALUES (?, 'brouillon', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(inv.type, JSON.stringify(inv.request_ids), inv.pro_id, inv.parent_id, inv.is_pro, JSON.stringify(inv.client), JSON.stringify(inv.lines),
+      total, inv.deduct_cents, today, inv.sale_date, due, inv.object, inv.quote_ref, inv.notes).run();
+  const id = r.meta.last_row_id;
+  if (paiement) {
+    await db.prepare('INSERT INTO payments (invoice_id, date, amount_cents, method, note) VALUES (?, ?, ?, ?, ?)')
+      .bind(id, paiement.date, paiement.amount_cents, paiement.method, paiement.note).run();
+  }
+  return id;
+}
+
+class Erreur extends Error { constructor(msg, status = 400) { super(msg); this.status = status; } }
+
+async function validerFacture(db, id) {
+  const inv = await db.prepare('SELECT * FROM invoices WHERE id = ?').bind(id).first();
+  if (!inv) throw new Erreur('Facture introuvable.', 404);
+  if (inv.status !== 'brouillon') throw new Erreur('Cette facture est déjà validée.');
+  const I = parseInvoice(inv);
+  if (!I.lines.length || !I.total_cents) throw new Erreur('La facture est vide : ajoutez au moins une ligne avec un montant.');
+  if (I.lines.some(l => !l.label)) throw new Erreur('Chaque ligne doit avoir une désignation.');
+  if (!I.client.nom && !I.client.societe) throw new Erreur('Indiquez le nom du client.');
+  if (I.is_pro && !I.client.adresse) throw new Erreur('Pour un client professionnel, l’adresse de facturation est obligatoire.');
+  if (!isoDay(I.issue_date)) throw new Erreur('Date de facture invalide.');
+  const prefix = I.type === 'avoir' ? 'AV' : 'FA';
+  const annee = I.issue_date.slice(0, 4);
+  const S = await lireReglages(db);
+  for (let essai = 0; essai < 4; essai++) {
+    const rows = (await db.prepare('SELECT number, issue_date, source FROM invoices WHERE number LIKE ?').bind(`${prefix}-${annee}-%`).all()).results;
+    let max = 0, derniere = '';
+    for (const r of rows) {
+      const n = parseInt(r.number.slice(prefix.length + 6), 10);
+      if (Number.isFinite(n)) max = Math.max(max, n);
+      if (r.source !== 'import' && r.issue_date > derniere) derniere = r.issue_date;
+    }
+    if (derniere && I.issue_date < derniere) {
+      throw new Erreur(`La date de la facture ne peut pas être antérieure à celle de la dernière facture émise (${frDay(derniere)}) : la numérotation doit suivre l’ordre chronologique.`);
+    }
+    // Numéro de départ choisi dans les réglages (factures déjà émises ailleurs cette année)
+    const dep = String(S.invoice_next || '').trim().match(/^(?:FA-)?(\d{4})-(\d{1,6})$/);
+    if (prefix === 'FA' && dep && dep[1] === annee) max = Math.max(max, parseInt(dep[2], 10) - 1);
+    const number = `${prefix}-${annee}-${String(max + 1).padStart(4, '0')}`;
+    try {
+      const r = await db.prepare("UPDATE invoices SET number = ?, status = 'validée', validated_at = datetime('now') WHERE id = ? AND status = 'brouillon'").bind(number, id).run();
+      if (!r.meta.changes) throw new Erreur('Cette facture est déjà validée.');
+      return number;
+    } catch (e) {
+      if (e instanceof Erreur || !/UNIQUE/i.test(e.message)) throw e; // numéro pris entre-temps : on recommence
+    }
+  }
+  throw new Erreur('Numérotation momentanément impossible, réessayez.', 503);
+}
+
+// Statut lisible : payée, partiellement payée, en retard, à payer, avoir…
+function statutFacture(i, today) {
+  if (i.status === 'brouillon') return 'brouillon';
+  const du = i.total_cents - i.deduct_cents;
+  if (i.type === 'avoir') return i.paid_cents && i.paid_cents <= du ? 'remboursé' : 'avoir';
+  if (i.paid_cents >= du) return 'payée';
+  if (i.due_date && i.due_date < today) return 'en retard';
+  return i.paid_cents > 0 ? 'partiel' : 'à payer';
+}
+
+async function listeFactures(db) {
+  const today = parisDay(Date.now());
+  const [inv, pay, exp] = await db.batch([
+    db.prepare(`SELECT i.*, COALESCE((SELECT SUM(amount_cents) FROM payments p WHERE p.invoice_id = i.id), 0) AS paid_cents
+      FROM invoices i ORDER BY CASE WHEN i.status = 'brouillon' THEN 0 ELSE 1 END, i.issue_date DESC, i.number DESC, i.id DESC`),
+    db.prepare('SELECT * FROM payments ORDER BY date DESC, id DESC'),
+    db.prepare('SELECT * FROM expenses ORDER BY date DESC, id DESC'),
+  ]);
+  return {
+    today,
+    invoices: inv.results.map(i => ({ ...parseInvoice(i), state: statutFacture(i, today) })),
+    payments: pay.results, expenses: exp.results,
+  };
+}
+
+async function lienPaiement(env, origin, id) {
+  return `${origin}/api/payer/${id}/${await hmac(`pay:${id}`, await sessionKey(env))}`;
+}
+
+async function verifierSumup(env, db, inv) {
+  if (!inv.sumup_checkout_id || !sumupApi(env)) return { status: 'AUCUN' };
+  const r = await fetch(`https://api.sumup.com/v0.1/checkouts/${encodeURIComponent(inv.sumup_checkout_id)}`, { headers: { Authorization: `Bearer ${env.SUMUP_API_KEY}` } })
+    .catch(err => ({ ok: false, status: 0, json: async () => ({ message: `SumUp injoignable (${err.message})` }) }));
+  const c = await r.json().catch(() => ({}));
+  if (!r.ok) return { status: 'ERREUR', error: c.message || c.error_message || `SumUp : erreur ${r.status}` };
+  if (c.status === 'PAID') {
+    const deja = await db.prepare('SELECT id FROM payments WHERE ref = ?').bind(inv.sumup_checkout_id).first();
+    if (!deja) {
+      const montant = Math.round((Number(c.amount) || 0) * 100);
+      await db.prepare("INSERT INTO payments (invoice_id, date, amount_cents, method, ref, note) VALUES (?, ?, ?, 'SumUp (en ligne)', ?, 'Paiement en ligne par carte')")
+        .bind(inv.id, parisDay(Date.now()), montant, inv.sumup_checkout_id).run();
+      return { status: 'PAID', nouveau: true, amount_cents: montant };
+    }
+    return { status: 'PAID', nouveau: false };
+  }
+  return { status: c.status || 'INCONNU' };
+}
+
+async function facturationApi(request, env, p, m) {
+  const db = env.DB;
+  let mt;
+  try {
+    if (p === '/api/admin/invoices' && m === 'GET') return json(await listeFactures(db));
+    if (p === '/api/admin/invoices' && m === 'POST') {
+      const id = await creerFacture(db, await request.json());
+      return json({ ok: true, id });
+    }
+    if ((mt = p.match(/^\/api\/admin\/invoices\/(\d+)$/))) {
+      const id = +mt[1];
+      const row = await db.prepare(`SELECT i.*, COALESCE((SELECT SUM(amount_cents) FROM payments p WHERE p.invoice_id = i.id), 0) AS paid_cents FROM invoices i WHERE id = ?`).bind(id).first();
+      if (!row) return json({ error: 'Facture introuvable.' }, 404);
+      if (m === 'GET') {
+        const [pays, liees, S] = await Promise.all([
+          db.prepare('SELECT * FROM payments WHERE invoice_id = ? ORDER BY date, id').bind(id).all(),
+          db.prepare("SELECT id, number, type, status, total_cents, deduct_cents, issue_date FROM invoices WHERE (id = ? OR parent_id = ?) AND id != ?").bind(row.parent_id || 0, id, id).all(),
+          lireReglages(db),
+        ]);
+        return json({
+          invoice: { ...parseInvoice(row), state: statutFacture(row, parisDay(Date.now())) }, payments: pays.results, related: liees.results, settings: S,
+          paylink: row.status === 'validée' && row.type !== 'avoir' ? await lienPaiement(env, new URL(request.url).origin, id) : '',
+          sumup: { api: sumupApi(env), link: S.sumup_link || '' }, mail: etatMail(env),
+        });
+      }
+      if (m === 'PUT') {
+        const b = await request.json();
+        if (row.status !== 'brouillon') {
+          // Facture validée : seuls le lien de paiement et la relance peuvent changer (pas le contenu)
+          if ('payment_link' in b) await db.prepare('UPDATE invoices SET payment_link = ? WHERE id = ?').bind(clean(b.payment_link, 400), id).run();
+          if (b.relance) await db.prepare("UPDATE invoices SET reminders = COALESCE(reminders, 0) + 1, last_reminder_at = datetime('now') WHERE id = ?").bind(id).run();
+          return json({ ok: true });
+        }
+        const lines = lignesPropres(b.lines ?? safeJson(row.lines, []));
+        const total = (row.type === 'avoir' ? -1 : 1) * Math.abs(totalLignes(lines));
+        const v = {
+          client: JSON.stringify(clientPropre(b.client ?? safeJson(row.client, {}))), lines: JSON.stringify(lines), total_cents: total,
+          issue_date: isoDay(b.issue_date) || row.issue_date, sale_date: isoDay(b.sale_date) || row.sale_date, due_date: isoDay(b.due_date) || row.due_date,
+          object: 'object' in b ? clean(b.object, 300) : row.object, notes: 'notes' in b ? clean(b.notes, 2000) : row.notes,
+          is_pro: 'is_pro' in b ? (b.is_pro ? 1 : 0) : row.is_pro, payment_link: 'payment_link' in b ? clean(b.payment_link, 400) : row.payment_link,
+          quote_ref: 'quote_ref' in b ? clean(b.quote_ref, 300) : row.quote_ref,
+        };
+        if (row.type !== 'avoir' && total - row.deduct_cents < 0) return json({ error: 'Le total ne peut pas être inférieur à l’acompte déjà facturé.' }, 400);
+        await db.prepare(`UPDATE invoices SET ${Object.keys(v).map(k => `${k} = ?`).join(', ')} WHERE id = ?`).bind(...Object.values(v), id).run();
+        return json({ ok: true, total_cents: total });
+      }
+      if (m === 'DELETE') {
+        if (row.status !== 'brouillon' && row.source !== 'import') return json({ error: 'Une facture validée ne peut pas être supprimée : créez un avoir.' }, 400);
+        await db.batch([db.prepare('DELETE FROM payments WHERE invoice_id = ?').bind(id), db.prepare('DELETE FROM invoices WHERE id = ?').bind(id)]);
+        return json({ ok: true });
+      }
+    }
+    if ((mt = p.match(/^\/api\/admin\/invoices\/(\d+)\/email$/)) && m === 'POST') return json(await envoyerFacture(request, env, +mt[1]));
+    if (p === '/api/admin/mail-test' && m === 'POST') {
+      const st = etatMail(env);
+      if (!st.actif) throw new Erreur('Aucun envoi d’e-mail configuré (voir Factures → Réglages).');
+      const S = await lireReglages(db);
+      const to = (await request.json().catch(() => ({}))).to || st.from;
+      await envoyerMail(env, { to: [to], subject: 'Test d’envoi — Saveurs des Rois', fromName: S.company_name || 'Saveurs des Rois',
+        text: 'Ceci est un e-mail de test envoyé depuis l’administration de votre site. Les factures partiront de cette adresse.',
+        html: gabaritMail(S, 'Ceci est un e-mail de test envoyé depuis l’administration de votre site.\n\nLes factures partiront de cette adresse.') });
+      return json({ ok: true, to, via: st.via });
+    }
+    if ((mt = p.match(/^\/api\/admin\/invoices\/(\d+)\/valider$/)) && m === 'POST') return json({ ok: true, number: await validerFacture(db, +mt[1]) });
+    if ((mt = p.match(/^\/api\/admin\/invoices\/(\d+)\/sumup$/)) && m === 'POST') {
+      const inv = await db.prepare('SELECT * FROM invoices WHERE id = ?').bind(+mt[1]).first();
+      if (!inv) return json({ error: 'Facture introuvable.' }, 404);
+      return json({ ok: true, ...(await verifierSumup(env, db, inv)) });
+    }
+    if ((mt = p.match(/^\/api\/admin\/invoices\/(\d+)\/payments$/)) && m === 'POST') {
+      const inv = await db.prepare('SELECT id, status, type FROM invoices WHERE id = ?').bind(+mt[1]).first();
+      if (!inv) return json({ error: 'Facture introuvable.' }, 404);
+      if (inv.status !== 'validée') return json({ error: 'Validez la facture avant d’enregistrer un paiement.' }, 400);
+      const b = await request.json();
+      const montant = Math.abs(toInt(b.amount_cents) || 0) * (inv.type === 'avoir' ? -1 : 1); // avoir : remboursement
+      if (!montant) return json({ error: 'Indiquez le montant reçu.' }, 400);
+      const date = isoDay(b.date);
+      if (!date) return json({ error: 'Indiquez la date du paiement.' }, 400);
+      await db.prepare('INSERT INTO payments (invoice_id, date, amount_cents, method, note) VALUES (?, ?, ?, ?, ?)')
+        .bind(inv.id, date, montant, clean(b.method, 40) || 'Autre', clean(b.note, 300)).run();
+      return json({ ok: true });
+    }
+    if ((mt = p.match(/^\/api\/admin\/payments\/(\d+)$/)) && m === 'DELETE') {
+      await db.prepare('DELETE FROM payments WHERE id = ?').bind(+mt[1]).run();
+      return json({ ok: true });
+    }
+
+    // Registre des achats (obligatoire pour la vente de marchandises)
+    if (p === '/api/admin/expenses' && m === 'POST') {
+      const e = depensePropre(await request.json());
+      if (e.error) return json({ error: e.error }, 400);
+      const r = await db.prepare('INSERT INTO expenses (date, supplier, category, label, amount_cents, method, note) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .bind(e.date, e.supplier, e.category, e.label, e.amount_cents, e.method, e.note).run();
+      return json({ ok: true, id: r.meta.last_row_id });
+    }
+    if ((mt = p.match(/^\/api\/admin\/expenses\/(\d+)$/))) {
+      if (m === 'PUT') {
+        const e = depensePropre(await request.json());
+        if (e.error) return json({ error: e.error }, 400);
+        await db.prepare('UPDATE expenses SET date = ?, supplier = ?, category = ?, label = ?, amount_cents = ?, method = ?, note = ? WHERE id = ?')
+          .bind(e.date, e.supplier, e.category, e.label, e.amount_cents, e.method, e.note, +mt[1]).run();
+        return json({ ok: true });
+      }
+      if (m === 'DELETE') { await db.prepare('DELETE FROM expenses WHERE id = ?').bind(+mt[1]).run(); return json({ ok: true }); }
+    }
+
+    // Import de l'historique (factures passées, achats)
+    if (p === '/api/admin/import' && m === 'POST') return json(await importer(db, await request.json()));
+    if ((mt = p.match(/^\/api\/admin\/import\/([\w-]{6,40})$/)) && m === 'DELETE') {
+      const lot = mt[1];
+      await db.batch([
+        db.prepare('DELETE FROM payments WHERE import_batch = ?').bind(lot),
+        db.prepare("DELETE FROM invoices WHERE import_batch = ? AND source = 'import'").bind(lot),
+        db.prepare('DELETE FROM expenses WHERE import_batch = ?').bind(lot),
+      ]);
+      return json({ ok: true });
+    }
+  } catch (e) {
+    if (e instanceof Erreur) return json({ error: e.message }, e.status);
+    throw e;
+  }
+  return null;
+}
+
+function depensePropre(b) {
+  const date = isoDay(b.date);
+  const amount = toInt(b.amount_cents);
+  if (!date) return { error: 'Indiquez la date de l’achat.' };
+  if (!amount) return { error: 'Indiquez le montant de l’achat.' };
+  return { date, amount_cents: amount, supplier: clean(b.supplier, 120), category: clean(b.category, 60) || 'Autre', label: clean(b.label, 200), method: clean(b.method, 40), note: clean(b.note, 300) };
+}
+
+async function importer(db, b) {
+  const rows = Array.isArray(b.rows) ? b.rows.slice(0, 5000) : [];
+  if (!rows.length) throw new Erreur('Aucune ligne à importer.');
+  const lot = `imp-${Date.now().toString(36)}`;
+  if (b.kind === 'achats') {
+    const ok = rows.map(depensePropre).filter(e => !e.error);
+    for (let i = 0; i < ok.length; i += 50) {
+      await db.batch(ok.slice(i, i + 50).map(e => db.prepare('INSERT INTO expenses (date, supplier, category, label, amount_cents, method, note, import_batch) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+        .bind(e.date, e.supplier, e.category, e.label, e.amount_cents, e.method, e.note, lot)));
+    }
+    return { ok: true, lot, importees: ok.length, ignorees: rows.length - ok.length, doublons: 0 };
+  }
+  // Factures passées : déjà émises, donc enregistrées comme validées (numéro d'origine conservé)
+  const existants = new Set((await db.prepare('SELECT number FROM invoices WHERE number IS NOT NULL').all()).results.map(r => r.number));
+  const propres = [];
+  let ignorees = 0, doublons = 0;
+  for (const r of rows) {
+    const number = clean(r.number, 40), date = isoDay(r.issue_date), montant = toInt(r.amount_cents);
+    if (!number || !date || !montant) { ignorees++; continue; }
+    if (existants.has(number)) { doublons++; continue; }
+    existants.add(number);
+    const avoir = r.type === 'avoir' || montant < 0;
+    const lignes = [{ label: clean(r.label, 200) || (avoir ? 'Avoir (importé)' : 'Vente de pâtisseries (facture importée)'), detail: '', qty: 1, unit: '', prix: Math.abs(montant) }];
+    const paye = r.paid === true || isoDay(r.paid_date);
+    propres.push({
+      number, date, avoir, lignes, total: avoir ? -Math.abs(montant) : Math.abs(montant), is_pro: r.is_pro ? 1 : 0,
+      client: clientPropre({ nom: r.client, societe: r.societe, siret: r.siret, adresse: r.adresse }),
+      due: isoDay(r.due_date) || date,
+      paiement: paye ? { date: isoDay(r.paid_date) || date, amount: avoir ? -Math.abs(toInt(r.paid_cents) || montant) : Math.abs(toInt(r.paid_cents) || montant), method: clean(r.method, 40) || 'Non précisé' } : null,
+    });
+  }
+  for (let i = 0; i < propres.length; i += 40) {
+    const part = propres.slice(i, i + 40);
+    const res = await db.batch(part.map(x => db.prepare(`INSERT INTO invoices (number, type, status, is_pro, client, lines, total_cents, deduct_cents, issue_date, sale_date, due_date, object, source, import_batch, validated_at)
+      VALUES (?, ?, 'validée', ?, ?, ?, ?, 0, ?, ?, ?, 'Facture importée', 'import', ?, datetime('now')) RETURNING id`)
+      .bind(x.number, x.avoir ? 'avoir' : 'facture', x.is_pro, JSON.stringify(x.client), JSON.stringify(x.lignes), x.total, x.date, x.date, x.due, lot)));
+    const pays = [];
+    res.forEach((r, k) => {
+      const x = part[k], id = r.results?.[0]?.id;
+      if (id && x.paiement) pays.push(db.prepare("INSERT INTO payments (invoice_id, date, amount_cents, method, ref, import_batch) VALUES (?, ?, ?, ?, 'import', ?)").bind(id, x.paiement.date, x.paiement.amount, x.paiement.method, lot));
+    });
+    if (pays.length) await db.batch(pays);
+  }
+  return { ok: true, lot, importees: propres.length, ignorees, doublons };
+}
+
+/* Page publique de paiement : lien imprimé sur la facture, qui ne périme jamais.
+   GET : récapitulatif ; POST : crée un paiement SumUp du reste à payer (les robots d'aperçu de liens ne déclenchent rien). */
+async function payerFacture(request, env, url, id, sig, retour) {
+  const db = env.DB;
+  if (!env.ADMIN_PASSWORD || !(await safeEqual(sig, await hmac(`pay:${id}`, await sessionKey(env))))) return pagePaiement('Lien invalide', '<p>Ce lien de paiement n’est pas valide. Contactez-nous pour recevoir le bon lien.</p>', 404);
+  const inv = await db.prepare(`SELECT i.*, COALESCE((SELECT SUM(amount_cents) FROM payments p WHERE p.invoice_id = i.id), 0) AS paid_cents FROM invoices i WHERE id = ? AND status = 'validée' AND type != 'avoir'`).bind(id).first();
+  if (!inv) return pagePaiement('Facture introuvable', '<p>Cette facture n’existe plus. Contactez-nous.</p>', 404);
+  const S = await lireReglages(db);
+  const nom = esc(S.company_name || 'Saveurs des Rois');
+  const contact = [S.company_phone || S.contact_phone, S.company_email || S.contact_email].filter(Boolean).map(esc).join(' · ');
+
+  if (retour) {
+    const v = await verifierSumup(env, db, inv).catch(() => ({ status: 'ERREUR' }));
+    if (v.status === 'PAID') {
+      if (v.nouveau) {
+        const alerte = notify(env, { kind: 'paiement', name: safeJson(inv.client, {}).nom || inv.number, message: `Facture ${inv.number} : ${eur(v.amount_cents)} payés par carte (SumUp).`, items: [], estimate_cents: 0 }, url.origin).catch(() => {});
+        await alerte;
+      }
+      return pagePaiement('Merci !', `<p>Votre paiement pour la facture <strong>${esc(inv.number)}</strong> est bien reçu.</p><p>À très bientôt,<br>${nom}</p>`);
+    }
+    if (v.status === 'FAILED') return pagePaiement('Paiement non abouti', `<p>Le paiement n’a pas abouti. Vous pouvez réessayer.</p><p><a class="b" href="${url.pathname.replace(/\/retour$/, '')}">Réessayer</a></p>`);
+    return pagePaiement('Paiement en cours', `<p>Votre paiement est en cours de vérification. Si vous avez validé le paiement, inutile de recommencer : nous le recevrons sous peu.</p><p>${contact}</p>`);
+  }
+
+  const reste = inv.total_cents - inv.deduct_cents - inv.paid_cents;
+  if (reste <= 0) return pagePaiement('Facture réglée', `<p>La facture <strong>${esc(inv.number)}</strong> est entièrement réglée. Merci !</p>`);
+  const lien = /^https:\/\//.test(inv.payment_link || '') ? inv.payment_link : /^https:\/\//.test(S.sumup_link || '') ? S.sumup_link : '';
+
+  if (request.method === 'POST') {
+    if (sumupApi(env)) try {
+      const r = await fetch('https://api.sumup.com/v0.1/checkouts', {
+        method: 'POST', headers: { Authorization: `Bearer ${env.SUMUP_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          merchant_code: env.SUMUP_MERCHANT_CODE, amount: reste / 100, currency: 'EUR',
+          checkout_reference: `${inv.number}-${Date.now().toString(36)}`, description: `Facture ${inv.number} — ${S.company_name || 'Saveurs des Rois'}`,
+          redirect_url: `${url.origin}${url.pathname.replace(/\/$/, '')}/retour`, hosted_checkout: { enabled: true },
+        }),
+      });
+      const c = await r.json().catch(() => ({}));
+      if (r.ok && c.hosted_checkout_url) {
+        await db.prepare('UPDATE invoices SET sumup_checkout_id = ? WHERE id = ?').bind(c.id, id).run();
+        return Response.redirect(c.hosted_checkout_url, 303);
+      }
+      console.error('SumUp :', r.status, JSON.stringify(c));
+    } catch (err) { console.error('SumUp injoignable :', err.message); }
+    if (lien) return Response.redirect(lien, 303);
+  }
+
+  const peutPayer = sumupApi(env) || lien;
+  const virement = S.company_iban ? `<p class="petit">Ou par virement : IBAN <strong>${esc(S.company_iban)}</strong>${S.company_bic ? ` · BIC ${esc(S.company_bic)}` : ''}, en indiquant « ${esc(inv.number)} ».</p>` : '';
+  return pagePaiement(`Facture ${esc(inv.number)}`, `
+    <p class="montant">${eur(reste)}</p><p class="petit">reste à payer · facture du ${frDay(inv.issue_date)}</p>
+    ${peutPayer ? `<form method="post"><button class="b" type="submit">Payer par carte</button></form><p class="petit">Paiement sécurisé par SumUp.</p>` : '<p>Le paiement en ligne n’est pas encore disponible : contactez-nous.</p>'}
+    ${virement}<p class="petit">${contact}</p>`);
+}
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function pagePaiement(titre, corps, status = 200) {
+  return new Response(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">
+<title>${titre} — Saveurs des Rois</title><link rel="icon" href="/assets/img/favicon.png">
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#050505;color:#fbf8f1;font:18px/1.5 Georgia,serif;padding:1.2rem;box-sizing:border-box}
+main{max-width:430px;width:100%;box-sizing:border-box;text-align:center;border:1px solid #d6b55d;border-radius:20px;padding:2rem 1.5rem;background:#0d0b08}
+img{width:64px}h1{color:#d6b55d;font-weight:600;font-size:1.5rem;margin:.6rem 0 1rem}.montant{font-size:2.4rem;color:#ecd79a;margin:0}.petit{font-size:.9rem;color:#dcc08f}
+.b{display:inline-block;background:#d6b55d;color:#050505;border:0;border-radius:999px;padding:.8rem 1.8rem;font:600 1rem Georgia,serif;cursor:pointer;text-decoration:none;margin-top:.6rem}a{color:#d6b55d}
+main:has(.acc){max-width:540px}.dv{width:100%;border-collapse:collapse;text-align:left;font-size:.95rem;margin:.6rem 0}.dv td{padding:.45rem .2rem;border-bottom:1px solid #3a3122;vertical-align:top}.dv small{color:#dcc08f}.dv .n{text-align:right;white-space:nowrap}
+.dv--tot td{border:0;padding:.25rem .2rem}.dv--tot .fort td{font-size:1.15rem;color:#ecd79a;border-top:1px solid #d6b55d;padding-top:.5rem}
+.acc{display:grid;gap:.8rem;text-align:left;margin:1.2rem 0 .6rem;border-top:1px solid #3a3122;padding-top:1rem}.acc label{display:grid;gap:.3rem}.acc input:not([type=checkbox]),.acc textarea{font:inherit;padding:.6rem .8rem;border-radius:10px;border:1px solid #8c6b22;background:#16130d;color:#fbf8f1}
+.acc .case{display:flex;gap:.6rem;align-items:flex-start}.acc .case input{margin-top:.35rem;width:1.1rem;height:1.1rem;accent-color:#d6b55d}.acc .b{justify-self:center}.err{background:#3a1512;color:#f2c2b9;border-radius:10px;padding:.5rem .8rem}</style></head>
+<body><main><img src="/assets/img/logo-transparent.webp" alt="Saveurs des Rois"><h1>${titre}</h1>${corps}</main></body></html>`,
+  { status, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' } });
+}
+
+/* ---------------------------------------------------------------- envoi des factures par e-mail */
+
+// Deux solutions, au choix (secrets Cloudflare) :
+//  • Gmail (ou autre messagerie) : SMTP_USER + SMTP_PASS (mot de passe d'application) — gratuit, sans nom de domaine,
+//    les e-mails partent de votre adresse et apparaissent dans vos « Messages envoyés ».
+//    Facultatif : SMTP_HOST (smtp.gmail.com), SMTP_PORT (465), SMTP_FROM.
+//  • Resend : RESEND_API_KEY + INVOICE_FROM (adresse d'un domaine vérifié chez Resend).
+function etatMail(env) {
+  if (env.SMTP_USER && env.SMTP_PASS) return { actif: true, via: 'smtp', from: env.SMTP_FROM || env.SMTP_USER, host: env.SMTP_HOST || 'smtp.gmail.com' };
+  if (env.RESEND_API_KEY && env.INVOICE_FROM) return { actif: true, via: 'resend', from: env.INVOICE_FROM };
+  return { actif: false, via: '', from: '', resendSansDomaine: Boolean(env.RESEND_API_KEY) };
+}
+
+const b64utf8 = str => { const u = new TextEncoder().encode(str); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode(...u.subarray(i, i + 0x8000)); return btoa(s); };
+const plier = b64 => b64.replace(/.{1,76}/g, '$&\r\n').trimEnd();
+const enteteUtf8 = t => (/^[\x20-\x7e]*$/.test(t) ? t : `=?UTF-8?B?${b64utf8(t)}?=`);
+const adresseValide = a => /^[^\s@<>,;"]+@[^\s@<>,;"]+\.[^\s@<>,;"]+$/.test(a);
+
+function messageMime({ from, fromName, to, replyTo, subject, text, html, attachments = [] }) {
+  const b1 = `sdr1${crypto.randomUUID().replace(/-/g, '')}`, b2 = `sdr2${crypto.randomUUID().replace(/-/g, '')}`;
+  const l = [
+    `From: ${enteteUtf8(fromName || 'Saveurs des Rois')} <${from}>`,
+    `To: ${to.join(', ')}`,
+    ...(replyTo ? [`Reply-To: ${replyTo}`] : []),
+    `Subject: ${enteteUtf8(subject)}`,
+    `Date: ${new Date().toUTCString().replace('GMT', '+0000')}`,
+    `Message-ID: <${crypto.randomUUID()}@${from.split('@')[1]}>`,
+    'MIME-Version: 1.0',
+    `Content-Type: multipart/mixed; boundary="${b1}"`, '',
+    `--${b1}`, `Content-Type: multipart/alternative; boundary="${b2}"`, '',
+    `--${b2}`, 'Content-Type: text/plain; charset=UTF-8', 'Content-Transfer-Encoding: base64', '', plier(b64utf8(text)),
+    `--${b2}`, 'Content-Type: text/html; charset=UTF-8', 'Content-Transfer-Encoding: base64', '', plier(b64utf8(html)),
+    `--${b2}--`,
+  ];
+  for (const a of attachments) {
+    l.push(`--${b1}`, `Content-Type: ${a.type || 'application/pdf'}; name="${a.filename}"`, `Content-Disposition: attachment; filename="${a.filename}"`,
+      'Content-Transfer-Encoding: base64', '', plier(a.content));
+  }
+  l.push(`--${b1}--`, '');
+  return l.join('\r\n');
+}
+
+async function envoiSmtp(env, msg) {
+  const { connect } = await import('cloudflare:sockets');
+  const host = env.SMTP_HOST || 'smtp.gmail.com', port = Number(env.SMTP_PORT || 465);
+  const mode = env.SMTP_SECURE === 'off' ? 'off' : port === 465 ? 'on' : 'starttls';
+  let sock = connect({ hostname: host, port }, { secureTransport: mode, allowHalfOpen: false });
+  let reader = sock.readable.getReader(), writer = sock.writable.getWriter();
+  const enc = new TextEncoder(), dec = new TextDecoder();
+  let tampon = '';
+  const lire = async () => {
+    for (;;) {
+      const lignes = tampon.split('\r\n');
+      for (let i = 0; i < lignes.length - 1; i++) {
+        if (/^\d{3} /.test(lignes[i])) { tampon = lignes.slice(i + 1).join('\r\n'); return { code: +lignes[i].slice(0, 3), texte: lignes.slice(0, i + 1).join(' ') }; }
+      }
+      const { value, done } = await reader.read();
+      if (done) throw new Error('la connexion a été fermée par le serveur de messagerie');
+      tampon += dec.decode(value, { stream: true });
+    }
+  };
+  const cmd = async (ligne, attendu, secret = false) => {
+    if (ligne != null) await writer.write(enc.encode(ligne + '\r\n'));
+    const r = await lire();
+    if (!attendu.includes(r.code)) {
+      if (secret || r.code === 535) throw new Error('identifiant ou mot de passe d’application refusé par la messagerie (vérifiez SMTP_USER et SMTP_PASS)');
+      throw new Error(`réponse ${r.code} du serveur de messagerie : ${r.texte.slice(0, 180)}`);
+    }
+    return r;
+  };
+  const delai = new Promise((_, ko) => setTimeout(() => ko(new Error('le serveur de messagerie ne répond pas')), 25000));
+  const echange = (async () => {
+    await cmd(null, [220]);
+    await cmd('EHLO saveurs-des-rois', [250]);
+    if (mode === 'starttls') {
+      await cmd('STARTTLS', [220]);
+      reader.releaseLock(); writer.releaseLock();
+      sock = sock.startTls();
+      reader = sock.readable.getReader(); writer = sock.writable.getWriter();
+      await cmd('EHLO saveurs-des-rois', [250]);
+    }
+    await cmd('AUTH LOGIN', [334]);
+    await cmd(b64utf8(env.SMTP_USER), [334], true);
+    await cmd(b64utf8(env.SMTP_PASS.replace(/\s/g, '')), [235], true);
+    await cmd(`MAIL FROM:<${msg.from}>`, [250]);
+    for (const r of [...msg.to, ...(msg.bcc || [])]) await cmd(`RCPT TO:<${r}>`, [250, 251]);
+    await cmd('DATA', [354]);
+    const corps = messageMime(msg).split('\r\n').map(x => (x.startsWith('.') ? '.' + x : x)).join('\r\n');
+    await writer.write(enc.encode(corps + '\r\n.\r\n'));
+    await cmd(null, [250]);
+    await cmd('QUIT', [221]).catch(() => {});
+  })();
+  try { await Promise.race([echange, delai]); } finally { try { sock.close(); } catch { } }
+}
+
+async function envoyerMail(env, { to, bcc = [], subject, text, html, attachments = [], replyTo, fromName }) {
+  const st = etatMail(env);
+  if (!st.actif) throw new Erreur('Aucun envoi d’e-mail configuré : voir Factures → Réglages → « Envoi des factures par e-mail ».');
+  if (st.via === 'smtp') {
+    try { await envoiSmtp(env, { from: st.from, fromName, to, bcc, replyTo, subject, text, html, attachments }); }
+    catch (e) { if (e instanceof Erreur) throw e; throw new Erreur(`E-mail non envoyé : ${e.message}.`, 502); }
+    return st.via;
+  }
+  const r = await fetch('https://api.resend.com/emails', {
+    method: 'POST', headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: `${fromName || 'Saveurs des Rois'} <${st.from}>`, to, bcc: bcc.length ? bcc : undefined, reply_to: replyTo || undefined,
+      subject, text, html, attachments: attachments.map(a => ({ filename: a.filename, content: a.content })) }),
+  }).catch(e => ({ ok: false, status: 0, json: async () => ({ message: e.message }) }));
+  if (!r.ok) throw new Erreur(`E-mail non envoyé (Resend) : ${(await r.json().catch(() => ({}))).message || `erreur ${r.status}`}.`, 502);
+  return st.via;
+}
+
+function gabaritMail(S, message) {
+  const paragraphes = esc(message).replace(/(https:\/\/[^\s<]+)/g, '<a href="$1" style="color:#8c6b22">$1</a>').split(/\n{2,}/).map(p => `<p style="margin:0 0 14px;line-height:1.6">${p.replace(/\n/g, '<br>')}</p>`).join('');
+  const pied = [S.company_name || 'Saveurs des Rois', S.company_phone || S.contact_phone, S.company_email || S.contact_email].filter(Boolean).map(esc).join(' · ');
+  return `<div style="font-family:Georgia,'Times New Roman',serif;max-width:580px;margin:auto;color:#1e1812">
+    <div style="background:#050505;color:#d6b55d;padding:18px 24px;font-size:21px;letter-spacing:.05em;border-bottom:2px solid #d6b55d">${esc(S.company_name || 'Saveurs des Rois')}</div>
+    <div style="border:1px solid #dcc08f;border-top:0;padding:24px;background:#fbf8f1;font-size:16px">${paragraphes}</div>
+    <p style="font-size:12px;color:#5b4f40;text-align:center;margin:12px 0">${pied}<br>Pâtisseries marocaines artisanales</p></div>`;
+}
+
+async function envoyerFacture(request, env, id) {
+  const db = env.DB;
+  const inv = await db.prepare('SELECT * FROM invoices WHERE id = ?').bind(id).first();
+  if (!inv) throw new Erreur('Facture introuvable.', 404);
+  if (inv.status !== 'validée') throw new Erreur('Validez la facture avant de l’envoyer.');
+  const b = await request.json().catch(() => ({}));
+  const to = String(b.to || '').split(/[,;\s]+/).map(x => x.trim()).filter(Boolean).slice(0, 5);
+  if (!to.length || !to.every(adresseValide)) throw new Erreur('Adresse e-mail du client invalide.');
+  const pdf = String(b.pdf || '').replace(/^data:[^,]+,/, '');
+  if (!pdf || pdf.length > 7_000_000 || !/^[A-Za-z0-9+/=]+$/.test(pdf.slice(0, 200))) throw new Erreur('PDF de la facture manquant ou trop lourd.');
+  const S = await lireReglages(db);
+  const st = etatMail(env);
+  const message = clean(b.message, 5000);
+  const subject = clean(b.subject, 200) || `Facture ${inv.number} — ${S.company_name || 'Saveurs des Rois'}`;
+  const replyTo = S.company_email || S.contact_email || '';
+  const via = await envoyerMail(env, {
+    to, bcc: b.copie && adresseValide(st.from) && !to.includes(st.from) ? [st.from] : [], subject, text: message, html: gabaritMail(S, message), replyTo: replyTo !== st.from ? replyTo : '',
+    fromName: S.company_name || 'Saveurs des Rois',
+    attachments: [{ filename: (clean(b.filename, 80) || `${inv.number}.pdf`).replace(/[^\w.\- ]/g, '_'), content: pdf }],
+  });
+  await db.prepare(`UPDATE invoices SET sent_at = datetime('now'), sent_to = ?${b.relance ? ", reminders = COALESCE(reminders, 0) + 1, last_reminder_at = datetime('now')" : ''} WHERE id = ?`).bind(to.join(', '), id).run();
+  return { ok: true, via, to };
+}
+
+/* ---------------------------------------------------------------- devis : envoi par e-mail et acceptation en ligne */
+
+async function lienDevis(env, origin, id) {
+  return `${origin}/api/devis/${id}/${await hmac(`devis:${id}`, await sessionKey(env))}`;
+}
+
+// Totaux d'un devis enregistré (mêmes règles que la page devis)
+function totauxDevis(q) {
+  const t = { part: 0, pro: 0, frais: 0 };
+  (q?.lignes || []).forEach(l => { t[l.s] = (t[l.s] || 0) + Math.round((Number(l.qty) || 0) * (Number(l.prix) || 0)); });
+  const remise = Math.round(t.part * (Number(q?.remise) || 0) / 100);
+  const total = t.part - remise + t.pro + t.frais;
+  return { ...t, remise, total, acompte: Math.round(total * (Number(q?.acompte) || 0) / 100) };
+}
+function finValidite(q) {
+  if (!isoDay(q?.date)) return null;
+  return addDays(q.date, toInt(q.validite) || 30);
+}
+
+async function envoyerDevis(request, env, id) {
+  const db = env.DB;
+  const r = await db.prepare('SELECT * FROM requests WHERE id = ?').bind(id).first();
+  if (!r) throw new Erreur('Demande introuvable.', 404);
+  const q = safeJson(r.quote, null);
+  if (!q?.lignes?.length) throw new Erreur('Enregistrez d’abord le devis.');
+  const b = await request.json().catch(() => ({}));
+  const to = String(b.to || '').split(/[,;\s]+/).map(x => x.trim()).filter(Boolean).slice(0, 5);
+  if (!to.length || !to.every(adresseValide)) throw new Erreur('Adresse e-mail du client invalide.');
+  const pdf = String(b.pdf || '').replace(/^data:[^,]+,/, '');
+  if (!pdf || pdf.length > 7_000_000 || !/^[A-Za-z0-9+/=]+$/.test(pdf.slice(0, 200))) throw new Erreur('PDF du devis manquant ou trop lourd.');
+  const S = await lireReglages(db);
+  const st = etatMail(env);
+  const message = clean(b.message, 5000);
+  const replyTo = S.company_email || S.contact_email || '';
+  const via = await envoyerMail(env, {
+    to, bcc: b.copie && adresseValide(st.from) && !to.includes(st.from) ? [st.from] : [],
+    subject: clean(b.subject, 200) || `Votre devis ${q.numero} — ${S.company_name || 'Saveurs des Rois'}`,
+    text: message, html: gabaritMail(S, message), replyTo: replyTo !== st.from ? replyTo : '', fromName: S.company_name || 'Saveurs des Rois',
+    attachments: [{ filename: (clean(b.filename, 80) || `${q.numero}.pdf`).replace(/[^\w.\- ]/g, '_'), content: pdf }],
+  });
+  await db.prepare(`UPDATE requests SET quote_sent_at = datetime('now'), quote_sent_to = ?,
+    status = CASE WHEN status IN ('nouveau', 'en cours') THEN 'devis envoyé' ELSE status END WHERE id = ?`).bind(to.join(', '), id).run();
+  return { ok: true, via, to };
+}
+
+/* Page publique : le client consulte son devis et l'accepte (« bon pour accord » en ligne).
+   L'acceptation enregistre une copie du devis, passe la demande en « confirmé » et prépare le brouillon de la facture d'acompte. */
+async function accepterDevis(request, env, url, ctx, id, sig) {
+  const db = env.DB;
+  if (!env.ADMIN_PASSWORD || !(await safeEqual(sig, await hmac(`devis:${id}`, await sessionKey(env))))) return pagePaiement('Lien invalide', '<p>Ce lien n’est pas valide. Contactez-nous pour recevoir le bon lien.</p>', 404);
+  const r = await db.prepare('SELECT * FROM requests WHERE id = ?').bind(id).first();
+  const q = safeJson(r?.quote, null);
+  if (!r || !q?.lignes?.length || r.status === 'archivé') return pagePaiement('Devis indisponible', '<p>Ce devis n’est plus disponible. Contactez-nous.</p>', 404);
+  const S = await lireReglages(db);
+  const contact = [S.company_phone || S.contact_phone, S.company_email || S.contact_email].filter(Boolean).map(esc).join(' · ');
+  const today = parisDay(Date.now());
+  const t = totauxDevis(r.accepted_quote ? safeJson(r.accepted_quote, q) : q);
+
+  if (r.accepted_at) {
+    return pagePaiement('Devis accepté', `<p>Le devis <strong>${esc(q.numero)}</strong> a été accepté le ${frDay(r.accepted_at.slice(0, 10))}${r.accepted_name ? ` par ${esc(r.accepted_name)}` : ''}.</p><p>Merci pour votre confiance !</p><p class="petit">${contact}</p>`);
+  }
+  const fin = finValidite(q);
+  if (fin && fin < today) return pagePaiement('Devis expiré', `<p>Le devis <strong>${esc(q.numero)}</strong> était valable jusqu’au ${frDay(fin)}. Contactez-nous pour un devis à jour.</p><p class="petit">${contact}</p>`);
+
+  let erreur = '';
+  if (request.method === 'POST') {
+    const f = await request.formData().catch(() => null);
+    const nom = clean(f?.get('nom'), 120), ok = f?.get('accord') === 'oui', mot = clean(f?.get('message'), 1500);
+    if (f?.get('website')) return pagePaiement('Merci', '<p>Merci.</p>');
+    if (!nom || nom.length < 3) erreur = 'Indiquez votre nom et prénom.';
+    else if (!ok) erreur = 'Cochez la case « Bon pour accord » pour accepter le devis.';
+    else {
+      const res = await db.prepare(`UPDATE requests SET accepted_at = datetime('now'), accepted_name = ?, accepted_quote = ?,
+        status = 'confirmé', message = CASE WHEN ? = '' THEN message WHEN COALESCE(message, '') = '' THEN 'Message à l’acceptation : ' || ? ELSE message || char(10) || char(10) || 'Message à l’acceptation : ' || ? END
+        WHERE id = ? AND accepted_at IS NULL`).bind(nom, r.quote, mot, mot, mot, id).run();
+      if (res.meta.changes) {
+        // Brouillon de la facture d'acompte (à vérifier et valider dans l'administration)
+        const deja = await db.prepare("SELECT id FROM invoices WHERE EXISTS (SELECT 1 FROM json_each(invoices.request_ids) WHERE value = ?) LIMIT 1").bind(id).first();
+        if (!deja && t.acompte > 0) await creerFacture(db, { mode: 'demande', request_id: id, type: 'acompte', deposit_cents: t.acompte }).catch(e => console.error('Brouillon d’acompte :', e.message));
+        const alerte = notify(env, { kind: 'devis_accepte', name: nom, phone: r.phone, email: r.email, event_type: r.event_type, event_date: r.event_date,
+          message: `Devis ${q.numero} accepté en ligne (${eur(t.total)}).${t.acompte ? ` Brouillon de facture d’acompte (${eur(t.acompte)}) prêt à valider.` : ''}${mot ? `\n« ${mot} »` : ''}`, items: [], estimate_cents: t.total }, url.origin).catch(() => {});
+        if (ctx?.waitUntil) ctx.waitUntil(alerte);
+      }
+      const virement = S.company_iban && t.acompte ? `<p class="petit">Acompte à verser : <strong>${eur(t.acompte)}</strong> — virement sur l’IBAN ${esc(S.company_iban)} en indiquant « ${esc(q.numero)} ». Nous vous confirmons la réception.</p>` : '';
+      return pagePaiement('Merci !', `<p>Votre accord pour le devis <strong>${esc(q.numero)}</strong> (${eur(t.total)}) est bien enregistré.</p>${t.acompte ? `<p>Nous vous envoyons la facture d’acompte de ${eur(t.acompte)} très vite.</p>` : '<p>Nous revenons vers vous très vite pour la suite.</p>'}${virement}<p class="petit">${contact}</p>`);
+    }
+  }
+
+  const lignes = q.lignes.map(l => `<tr><td>${esc(l.label)}${l.detail ? `<br><small>${esc(l.detail)}</small>` : ''}</td><td class="n">${String(l.qty).replace('.', ',')}${l.kg ? ' kg' : ''}</td><td class="n">${eur(Math.round(l.qty * l.prix))}</td></tr>`).join('');
+  const corps = `
+    <p class="petit">Devis ${esc(q.numero)} du ${frDay(q.date)}${fin ? ` · valable jusqu’au ${frDay(fin)}` : ''}</p>
+    <p>${esc(q.client?.nom || r.name)}${q.evenement ? `<br><span class="petit">${esc(q.evenement)}</span>` : ''}</p>
+    <table class="dv"><tbody>${lignes}</tbody></table>
+    <table class="dv dv--tot"><tbody>
+      ${t.remise ? `<tr><td>Remise</td><td class="n">− ${eur(t.remise)}</td></tr>` : ''}
+      <tr class="fort"><td>Total</td><td class="n">${eur(t.total)}</td></tr>
+      ${t.acompte ? `<tr><td>Acompte à la commande (${String(q.acompte).replace('.', ',')} %)</td><td class="n">${eur(t.acompte)}</td></tr>` : ''}
+    </tbody></table>
+    <p class="petit">${esc(S.quote_legal || 'TVA non applicable, art. 293 B du CGI.')}</p>
+    ${erreur ? `<p class="err">${esc(erreur)}</p>` : ''}
+    <form method="post" class="acc">
+      <label>Nom et prénom<input name="nom" required autocomplete="name" value=""></label>
+      <label class="case"><input type="checkbox" name="accord" value="oui" required> <span>J’ai lu ce devis et je l’accepte : <strong>bon pour accord</strong>.</span></label>
+      <label>Un message pour nous ? (facultatif)<textarea name="message" rows="2" placeholder="Horaire de retrait, précision…"></textarea></label>
+      <input name="website" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px" aria-hidden="true">
+      <button class="b" type="submit">J’accepte le devis</button>
+    </form>
+    <p class="petit">Une question ou une modification ? ${contact || 'Contactez-nous.'}</p>`;
+  return pagePaiement(`Votre devis`, corps, erreur ? 400 : 200);
 }
 
 /* ---------------------------------------------------------------- auth */

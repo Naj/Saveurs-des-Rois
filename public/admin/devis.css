@@ -92,3 +92,11 @@ body { margin: 0; background: #e9e2d2; color: var(--encre); font: 400 15px/1.45 
 }
 .barre[hidden] { display: none; }
 .lien-mini { border: 0; background: none; color: var(--or-profond); text-decoration: underline; cursor: pointer; font: inherit; padding: 0 0 0 .3em; }
+
+/* Envoi du devis (barre du bas) */
+.envoi { flex-direction: column; align-items: stretch; gap: .45rem; }
+.envoi__ligne { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; justify-content: center; }
+.envoi__titre { color: var(--amande); font-size: .9rem; min-width: 7.5rem; text-align: right; }
+.envoi__note { color: var(--amande); font-size: .85rem; font-style: italic; }
+.envoi__ok { align-self: center; background: #1f3a1c; color: #cfe6c8; border-radius: 999px; padding: .25rem .9rem; font-size: .92rem; }
+@media (max-width: 640px) { .envoi__titre { min-width: 0; text-align: center; flex-basis: 100%; } }

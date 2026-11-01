@@ -9,7 +9,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/admin/devis.css?v=3.4">
+  <link rel="stylesheet" href="/admin/devis.css?v=3.7">
+  <link rel="stylesheet" href="/admin/facture.css?v=3.7">
 </head>
 <body>
   <div class="barre" id="barre">
@@ -20,14 +21,15 @@
       <button class="b b--ligne" id="ajoutPro" type="button">+ Ligne pro</button>
       <button class="b b--ligne" id="ajoutFrais" type="button">+ Livraison / frais</button>
       <button class="b b--ligne" id="enregistrer" type="button">Enregistrer</button>
-      <button class="b b--or" id="pdf" type="button">Télécharger en PDF</button>
+      <button class="b b--or" id="pdf" type="button">Imprimer / PDF</button>
     </div>
-    <p class="barre__aide">Tout est modifiable : cliquez sur un texte, une quantité ou un prix (les prix de la grille dégressive sont appliqués automatiquement). « Télécharger en PDF » ouvre l’impression : choisissez <strong>Enregistrer au format PDF</strong>.</p>
+    <p class="barre__aide">Tout est modifiable : cliquez sur un texte, une quantité ou un prix (les prix de la grille dégressive sont appliqués automatiquement). « Imprimer / PDF » ouvre l’impression (choisissez <strong>Enregistrer au format PDF</strong>) ; après enregistrement, la barre du bas permet d’envoyer le devis.</p>
   </div>
 
   <main id="doc" class="feuille" aria-live="polite"><p class="chargement">Chargement du devis…</p></main>
 
-  <div class="barre barre--bas" id="envoi" hidden></div>
-  <script src="/admin/devis.js?v=3.4" type="module"></script>
+  <div class="barre barre--bas envoi" id="envoi" hidden></div>
+  <dialog id="dlg" class="f-dlg"></dialog>
+  <script src="/admin/devis.js?v=3.7" type="module"></script>
 </body>
 </html>

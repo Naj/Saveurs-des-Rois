@@ -32,7 +32,8 @@ GitHub (code)  ──commit──▶  Cloudflare Pages (ou Workers) ──▶  S
     ├── _worker.js                  Serveur : API, admin, base de données (créée automatiquement)
     ├── _routes.json                Réserve le serveur aux adresses /api et /media
     ├── index.html, css/, js/       Pages publiques
-    ├── admin/                      Espace administrateur
+    ├── admin/                      Espace administrateur (facture.html : factures A4 ;
+    │                               vendor/ : SheetJS (Apache 2.0), qrcode-generator, html2canvas et jsPDF (MIT))
     ├── assets/img/                 Logo et photos
     └── assets/docs/                Carte complète en PDF
 ```
@@ -41,7 +42,9 @@ GitHub (code)  ──commit──▶  Cloudflare Pages (ou Workers) ──▶  S
 
 | Onglet | Ce que vous pouvez faire |
 |---|---|
-| Particuliers | Demandes de devis et messages des particuliers : **devis PDF à vos couleurs** (particuliers / pros), statut, réponse par e-mail ou WhatsApp ; état des alertes et envoi d'un test |
+| Accueil | **Tableau de bord** : encaissements, à faire, commandes des 14 prochains jours, quantités à préparer, visites |
+| Particuliers | Demandes de devis et messages des particuliers : **devis PDF à vos couleurs** (particuliers / pros), **envoi par e-mail avec lien d'acceptation en ligne**, statut, réponse par e-mail ou WhatsApp ; état des alertes et envoi d'un test |
+| Factures | **Facturation complète** : factures d'acompte, de solde, complètes, sans devis, mensuelles pros ; avoirs ; paiements, relances, lien et QR code de paiement SumUp ; livre des recettes, registre des achats, résultats d'exploitation ; **import de l'historique** (Excel/CSV) et exports comptables |
 | Professionnels | Demandes d'accès pro (validation, code personnel, envoi WhatsApp/e-mail), devis des pros, clients actifs, suspension |
 | Produits | **Ajouter une recette** (fiche guidée ou copie d'une fiche existante, aperçu, liste « Prêt à publier ? ») ; nom, nom arabe, description, prix (pièce, kilo, les deux ou sur devis), **grille dégressive à paliers**, photos, ingrédients, allergènes, valeurs nutritionnelles ; masquer, mettre en avant, ajouter, supprimer |
 | Galerie | Photos de vos événements (titre, occasion, légende), affichées sur la page « Vos événements » et l'accueil |
@@ -62,4 +65,7 @@ GitHub (code)  ──commit──▶  Cloudflare Pages (ou Workers) ──▶  S
 - **Applications installables (PWA)** : le site (icône noire, consultation hors connexion) et l'administration « SDR Gestion » (icône dorée, `admin/manifest.webmanifest`).
 - **Mises à jour** : vos fiches sont dans la base D1, jamais dans les fichiers ; une mise à jour ne les efface pas. Sauvegarde téléchargeable dans l'admin.
 - **Espace pro** : les prix au kilo ne sont envoyés qu'aux professionnels connectés par code (et à l'administratrice), jamais au public.
+- **Factures** : numérotation continue et chronologique, facture validée non modifiable (correction par avoir), mentions légales de la micro-entreprise (TVA non applicable, art. 293 B du CGI ; pénalités de retard pour les pros). Conservées dans D1 et dans la sauvegarde.
+- **Envoi des factures par e-mail (facultatif)** : secrets `SMTP_USER` + `SMTP_PASS` (mot de passe d'application Gmail) ; le PDF est joint automatiquement. Les envois manuels (PDF, messagerie, WhatsApp) restent disponibles.
+- **SumUp (facultatif)** : secrets `SUMUP_API_KEY` et `SUMUP_MERCHANT_CODE` pour enregistrer automatiquement les paiements par carte.
 - **Mot de passe** : jamais dans le code. Il est stocké chez Cloudflare (secret `ADMIN_PASSWORD`).

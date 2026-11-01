@@ -288,6 +288,52 @@ Le devis PDF d'une demande pro est prérempli avec le nom de l'entreprise, son S
 
 ---
 
+## Tableau de bord (onglet « Accueil »)
+
+L'administration s'ouvre sur un tableau de bord : encaissé du mois (comparé au mois précédent à la même date), factures à encaisser et en retard, nouvelles demandes ; une liste **À faire** (demandes à traiter, devis à préparer ou sans réponse, commandes à facturer, factures en retard, avis, sauvegarde) avec un bouton vers chaque action ; les **commandes des 14 prochains jours** avec leur état de paiement ; la liste **À préparer cette semaine** (total de pièces et de kilos par pâtisserie pour les commandes confirmées) ; les encaissements des 6 derniers mois et les visites de la semaine.
+
+## Facturation (onglet « Factures »)
+
+**Du devis à la facture payée**, sans logiciel en plus :
+
+1. Sous une demande (Particuliers ou Professionnels) : **✓ Devis accepté → facturer**. Choisissez *facture d'acompte* (puis *facture de solde* au retrait) ou *facture complète* ; indiquez l'acompte reçu.
+2. Un **brouillon** s'ouvre : tout est modifiable. **Valider et numéroter** lui donne son numéro définitif (FA-2026-0001, puis 0002…). Une facture validée ne se modifie plus : une erreur se corrige avec **Créer un avoir** (AV-2026-0001).
+3. **Télécharger en PDF**, puis **Envoyer** (e-mail ou WhatsApp, message prérempli). Quand le client paie : **Encaisser** / **Enregistrer un paiement**. Les factures non payées à l'échéance passent **en retard** (pastille rouge sur l'onglet) avec un bouton **Relancer**.
+
+Autres possibilités :
+
+- **Facture sans devis** (vente directe, marché…) et **Facture mensuelle pro** (toutes les commandes d'un client pro sur un mois, en une seule facture).
+- **Encaissements** = votre *livre des recettes* ; **Achats** = votre *registre des achats* (obligatoire pour la vente de marchandises) ; **Résultats** = chiffre d'affaires encaissé, achats, cotisations estimées et résultat, mois par mois, avec le montant à déclarer à l'URSSAF par trimestre.
+- **Import / export** : importez vos **factures et achats passés** depuis Excel ou CSV (les colonnes sont reconnues automatiquement ; un import peut être annulé), et exportez un **classeur Excel complet** ou des fichiers CSV pour votre comptable ou un logiciel (Contodéo…).
+- **Réglages** : conditions de règlement, délai des pros, IBAN, taux de cotisations, prochain numéro de facture si vous avez déjà facturé ailleurs cette année.
+
+> Avant la première facture : complétez **nom, SIRET et adresse** dans *Textes & contact → Devis PDF*. Ils sont obligatoires.
+
+### Envoyer les factures par e-mail depuis le site (facultatif, recommandé)
+
+Sur chaque facture, deux possibilités au choix :
+
+1. **Directement depuis le site** : « Envoyer la facture par e-mail » (ou « Relancer par e-mail ») envoie le message **avec le PDF joint**, depuis votre adresse Gmail. Une copie arrive dans vos « Messages envoyés », et la facture indique « Envoyée le … à … ».
+2. **Depuis votre messagerie ou votre téléphone**, comme avant : « Télécharger le fichier PDF », « Partager le PDF » (sur téléphone : WhatsApp, SMS…), « Préparer l'e-mail dans ma messagerie », « Préparer le message WhatsApp ».
+
+Activation de l'envoi direct (une seule fois, gratuit, sans nom de domaine) :
+
+1. Sur [myaccount.google.com → Sécurité](https://myaccount.google.com/security), activez la **Validation en deux étapes**.
+2. Ouvrez [Mots de passe des applications](https://myaccount.google.com/apppasswords), nommez-le « Saveurs des Rois », **Créer**, et notez les 16 lettres.
+3. Cloudflare → *Workers et Pages → saveurs-des-rois → Paramètres → Variables et secrets → + Ajouter*, type **Secret** : `SMTP_USER` = votre adresse Gmail, `SMTP_PASS` = les 16 lettres.
+4. *Deployments → ⋯ → Retry deployment*, puis *Factures → Réglages → M'envoyer un e-mail de test*.
+
+Le même réglage sert aux **devis** : sur la page du devis, après « Enregistrer », la barre du bas propose « Envoyer le devis par e-mail » (PDF joint), le téléchargement du fichier, l'e-mail ou le WhatsApp préparés. Le message contient un **lien « J'accepte le devis »** : le client voit son devis, saisit son nom et coche « Bon pour accord ». La demande passe alors en « confirmé », une copie du devis accepté est conservée, le **brouillon de la facture d'acompte** est préparé (si le devis prévoit un acompte) et vous recevez une alerte. Il ne reste qu'à vérifier et valider la facture.
+
+> Pourquoi pas Resend (utilisé pour les alertes) ? Sans nom de domaine vérifié, Resend n'envoie qu'à votre propre adresse : il ne peut pas écrire à vos clients.
+
+### Paiement par carte SumUp sur les factures (facultatif)
+
+Chaque facture porte un **QR code et un lien « Payer en ligne »** qui n'expire jamais et demande toujours le reste à payer.
+
+- **Sans réglage technique** : dans l'appli SumUp, créez un lien de paiement et collez-le dans *Factures → Réglages → Lien de paiement SumUp* (ou sur une facture précise). Pensez alors à enregistrer le paiement à réception.
+- **Paiement enregistré automatiquement** : sur [me.sumup.com](https://me.sumup.com) → *Paramètres → Développeurs → Clés API*, créez une clé (`sup_sk_…`) et notez votre code marchand. Puis Cloudflare → *Workers et Pages → saveurs-des-rois → Paramètres → Variables et secrets → + Ajouter*, type **Secret** : `SUMUP_API_KEY` = la clé, `SUMUP_MERCHANT_CODE` = le code marchand. *Retry deployment*. Le client paie par carte, le paiement s'inscrit sur la facture et vous recevez une alerte.
+
 ## Au quotidien
 
 | Je veux… | Où |

@@ -3,7 +3,7 @@
    - Pages et catalogue : réseau d'abord, copie locale si hors connexion.
    - Images et fichiers du site : servis depuis le cache, mis à jour en arrière-plan. */
 
-const VERSION = '3.4';
+const VERSION = '3.7';
 const CACHE = `sdr-${VERSION}`;
 const PRECACHE = [
   '/', '/index.html', '/404.html',

@@ -1,6 +1,8 @@
 /* Saveurs des Rois — devis PDF à partir d'une demande
    La page est le devis : tout est modifiable, puis « Télécharger en PDF » ouvre l'impression du navigateur. */
 
+import { pdfDepuis, enBase64, telechargerBlob, peutPartager } from './pdf.js?v=3.7';
+
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const euro = c => ((c || 0) / 100).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
@@ -10,7 +12,7 @@ const qteTxt = (q, kg) => kg ? String(Math.round(q * 1000) / 1000).replace('.', 
 const dateFr = iso => { const d = new Date(iso + 'T12:00:00'); return isNaN(d) ? '' : d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }); };
 
 const id = new URLSearchParams(location.search).get('id');
-let R, P, S, Q, PRO; // demande, produits, réglages, devis
+let R, P, S, Q, PRO, MAIL, LIEN; // demande, produits, réglages, devis, envoi d'e-mails, lien d'acceptation
 
 const SECTIONS = {
   part: { titre: 'Particuliers — à la pièce', note: 'Prix unitaires, dégressivité appliquée selon les quantités.' },
@@ -228,32 +230,102 @@ window.addEventListener('afterprint', () => { if (IMPR) { IMPR = false; rendu();
 window.addEventListener('beforeunload', e => { if (modifie) { e.preventDefault(); e.returnValue = ''; } });
 
 /* ---------- Envoi au client */
-function barreEnvoi() {
+const dateHeure = d => (d ? new Date(d.replace(' ', 'T') + 'Z').toLocaleString('fr-FR', { dateStyle: 'long', timeStyle: 'short' }) : '');
+const nomFichier = () => `${Q.numero || 'devis'}-saveurs-des-rois.pdf`;
+function texteDevis() {
   const t = totaux();
   const prenom = (Q.client.nom || '').split(' ')[0];
-  const texte = `Bonjour ${prenom},\n\nVeuillez trouver ci-joint votre devis ${Q.numero} d’un montant de ${euro(t.total)}, valable ${Q.validite} jours.\n\nPour confirmer votre commande, il vous suffit de nous le retourner signé avec la mention « Bon pour accord ».\n\nAvec nos remerciements,\n${S.company_name || 'Saveurs des Rois'}`;
+  return `Bonjour ${prenom},\n\nVeuillez trouver ci-joint votre devis ${Q.numero} d’un montant de ${euro(t.total)}, valable ${Q.validite} jours.${t.acompte ? `\n\nUn acompte de ${euro(t.acompte)} vous sera demandé à la commande.` : ''}${LIEN ? `\n\nPour l’accepter, un clic suffit :\n${LIEN}` : ''}\n\nVous pouvez aussi nous le retourner signé avec la mention « Bon pour accord ».\n\nAvec nos remerciements,\n${S.company_name || 'Saveurs des Rois'}`;
+}
+const genererPdf = () => pdfDepuis(doc, { avant: () => { IMPR = true; rendu(); }, apres: () => { IMPR = false; rendu(); }, titre: document.title, auteur: S.company_name || 'Saveurs des Rois' });
+
+function barreEnvoi() {
+  const texte = texteDevis();
   const tel = (Q.client.tel || '').replace(/\D/g, '').replace(/^0/, '33');
   const b = $('#envoi');
   b.hidden = false;
-  b.innerHTML = `<span>Après avoir téléchargé le PDF :</span>
-    ${Q.client.email ? `<a class="b b--ligne" href="mailto:${esc(Q.client.email)}?subject=${encodeURIComponent(`Votre devis ${Q.numero} — Saveurs des Rois`)}&body=${encodeURIComponent(texte)}">Préparer l’e-mail (joindre le PDF)</a>` : ''}
-    ${tel ? `<a class="b b--ligne" href="https://wa.me/${tel}?text=${encodeURIComponent(texte)}" target="_blank" rel="noopener">Préparer le message WhatsApp</a>` : ''}
-    <button class="b b--or" id="envoye" type="button">${R.status === 'devis envoyé' ? 'Statut : devis envoyé ✓' : 'Marquer « devis envoyé »'}</button>`;
-  $('#envoye').onclick = async () => {
-    try { await api(`/api/admin/requests/${id}`, { method: 'PUT', body: JSON.stringify({ status: 'devis envoyé' }) }); R.status = 'devis envoyé'; barreEnvoi(); }
-    catch (e) { etat(e.message, false); }
-  };
+  b.innerHTML = `
+    ${R.accepted_at ? `<span class="envoi__ok">✓ Accepté en ligne le ${dateHeure(R.accepted_at)}${R.accepted_name ? ` par ${esc(R.accepted_name)}` : ''}</span>`
+      : R.quote_sent_at ? `<span class="envoi__ok">✉ Envoyé par e-mail le ${dateHeure(R.quote_sent_at)} à ${esc(R.quote_sent_to || '')}</span>` : ''}
+    <div class="envoi__ligne"><span class="envoi__titre">Depuis le site :</span>
+      <button class="b b--or" id="envoiDirect" type="button">Envoyer le devis par e-mail</button>
+      <span class="envoi__note">${MAIL.actif ? `PDF joint, depuis ${esc(MAIL.from)}` : 'à activer dans Factures → Réglages'}</span></div>
+    <div class="envoi__ligne"><span class="envoi__titre">Vous-même :</span>
+      <button class="b b--ligne" id="fichierPdf" type="button">Télécharger le fichier PDF</button>
+      ${peutPartager ? '<button class="b b--ligne" id="partagerPdf" type="button">Partager le PDF</button>' : ''}
+      ${Q.client.email ? `<a class="b b--ligne" href="mailto:${esc(Q.client.email)}?subject=${encodeURIComponent(`Votre devis ${Q.numero} — Saveurs des Rois`)}&body=${encodeURIComponent(texte)}">Préparer l’e-mail</a>` : ''}
+      ${tel ? `<a class="b b--ligne" href="https://wa.me/${tel}?text=${encodeURIComponent(texte)}" target="_blank" rel="noopener">Préparer le message WhatsApp</a>` : ''}
+      ${LIEN ? '<button class="b b--ligne" id="copierLien" type="button">Copier le lien d’acceptation</button>' : ''}
+      <button class="b b--ligne" id="envoye" type="button">${['devis envoyé', 'confirmé'].includes(R.status) ? `Statut : ${R.status} ✓` : 'Marquer « devis envoyé »'}</button></div>`;
 }
+
+function dialogue(html, onSubmit) {
+  const d = $('#dlg');
+  d.innerHTML = `<form method="dialog" class="f-dlg__form">${html}<p class="f-dlg__err" hidden></p></form>`;
+  const form = d.querySelector('form');
+  form.addEventListener('submit', async e => {
+    if (e.submitter?.value === 'annuler') return;
+    e.preventDefault();
+    const btn = e.submitter; if (btn) btn.disabled = true;
+    try { await onSubmit(new FormData(form)); d.close(); }
+    catch (err) { const p = form.querySelector('.f-dlg__err'); p.textContent = err.message; p.hidden = false; etat(err.message, false); }
+    finally { if (btn) btn.disabled = false; }
+  });
+  d.showModal();
+}
+function dlgEnvoi() {
+  if (!MAIL.actif) {
+    return dialogue(`<h2>Envoi direct par e-mail</h2>
+      <p>L’envoi depuis le site n’est pas encore activé. C’est à faire une seule fois (5 minutes) : Administration → <strong>Factures → Réglages</strong> → « Envoi des factures par e-mail » (le même réglage sert aux devis).</p>
+      <p class="detail">En attendant : « Télécharger le fichier PDF » puis « Préparer l’e-mail ».</p>
+      <div class="f-dlg__btns"><button class="b b--or" value="annuler" formnovalidate>Compris</button></div>`, async () => {});
+  }
+  dialogue(`<h2>Envoyer le devis par e-mail</h2>
+    <label>À<input name="to" required value="${esc(Q.client.email || '')}" placeholder="adresse@client.fr"></label>
+    <label>Objet<input name="subject" value="${esc(`Votre devis ${Q.numero} — ${S.company_name || 'Saveurs des Rois'}`)}"></label>
+    <label>Message<textarea name="message" rows="11">${esc(texteDevis())}</textarea></label>
+    <label class="f-dlg__case"><input type="checkbox" name="copie" checked> M’envoyer une copie (${esc(MAIL.from)})</label>
+    <p class="detail">📎 ${esc(nomFichier())} sera joint automatiquement. Le client pourra accepter le devis en un clic grâce au lien du message.</p>
+    <div class="f-dlg__btns"><button class="b b--ligne" value="annuler" formnovalidate>Annuler</button><button class="b b--or" type="submit">Envoyer</button></div>`,
+  async fd => {
+    const to = String(fd.get('to') || '').trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+/.test(to)) throw new Error('Indiquez l’adresse e-mail du client.');
+    if (modifie) await enregistrer();
+    etat('Préparation du PDF…');
+    const pdf = await enBase64(await genererPdf());
+    etat('Envoi en cours…');
+    await api(`/api/admin/requests/${id}/quote-email`, { method: 'POST', body: JSON.stringify({ to, subject: fd.get('subject'), message: fd.get('message'), copie: fd.has('copie'), pdf, filename: nomFichier() }) });
+    R.quote_sent_at = new Date().toISOString().slice(0, 19).replace('T', ' '); R.quote_sent_to = to;
+    if (['nouveau', 'en cours'].includes(R.status)) R.status = 'devis envoyé';
+    barreEnvoi(); etat(`Devis envoyé à ${to} ✓`);
+  });
+}
+
+$('#envoi').addEventListener('click', async e => {
+  const t = e.target.closest('button'); if (!t) return;
+  try {
+    if (t.id === 'envoiDirect') return dlgEnvoi();
+    if (t.id === 'fichierPdf') { if (modifie) await enregistrer(); etat('Préparation du PDF…'); telechargerBlob(await genererPdf(), nomFichier()); etat('PDF téléchargé ✓'); }
+    if (t.id === 'partagerPdf') {
+      if (modifie) await enregistrer(); etat('Préparation du PDF…');
+      const f = new File([await genererPdf()], nomFichier(), { type: 'application/pdf' });
+      await navigator.share({ files: [f], title: document.title, text: texteDevis() }).catch(err => { if (err.name !== 'AbortError') throw err; });
+      etat('');
+    }
+    if (t.id === 'copierLien') { await navigator.clipboard.writeText(LIEN); etat('Lien d’acceptation copié ✓'); }
+    if (t.id === 'envoye') { await api(`/api/admin/requests/${id}`, { method: 'PUT', body: JSON.stringify({ status: 'devis envoyé' }) }); R.status = 'devis envoyé'; barreEnvoi(); }
+  } catch (err) { etat(err.message, false); }
+});
 
 /* ---------- Démarrage */
 (async () => {
   if (!id) { doc.innerHTML = '<p class="chargement">Aucune demande indiquée. Ouvrez le devis depuis l’onglet Demandes.</p>'; return; }
   try {
     const d = await api(`/api/admin/requests/${id}/quote`);
-    R = d.request; P = d.products; S = d.settings; PRO = d.pro;
+    R = d.request; P = d.products; S = d.settings; PRO = d.pro; MAIL = d.mail || { actif: false }; LIEN = d.acceptLink || '';
     Q = R.quote || nouveauDevis();
     rendu();
-    etat(R.quote ? 'Devis enregistré — reprise de votre dernière version' : 'Nouveau devis, prérempli depuis la demande');
+    etat(R.accepted_at ? `Devis accepté en ligne le ${dateHeure(R.accepted_at)}${R.accepted_name ? ` par ${R.accepted_name}` : ''} (la version acceptée est conservée)` : R.quote ? 'Devis enregistré — reprise de votre dernière version' : 'Nouveau devis, prérempli depuis la demande');
     if (R.quote) barreEnvoi();
   } catch (e) {
     doc.innerHTML = `<p class="chargement">${esc(e.message)}</p>`;

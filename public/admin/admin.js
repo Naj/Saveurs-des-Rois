@@ -1,4 +1,6 @@
 /* Saveurs des Rois — espace administrateur */
+import { initFactures, chargerFactures, tFactures, facturesDemande } from './factures.js?v=3.7';
+import { initAccueil, tAccueil, apresAccueil } from './accueil.js?v=3.7';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -6,7 +8,7 @@ const euro = c => ((c || 0) / 100).toLocaleString('fr-FR', { style: 'currency', 
 const STATUSES = ['nouveau', 'en cours', 'devis envoyé', 'confirmé', 'archivé'];
 const STATIC_IMAGES = ['sable-royal', 'cornes-de-gazelle', 'cornes-de-gazelle-coffrets', 'chbakia', 'haloua-sesame', 'makrout'].map(n => `/assets/img/${n}.webp`);
 
-const st = { pros: [], filtrePro: 'actives', products: [], videos: [], settings: {}, requests: [], media: [], gallery: [], reviews: [], tab: 'demandes', current: null, filter: 'actives', avisFiltre: 'en attente', statsJours: 30 };
+const st = { pros: [], filtrePro: 'actives', products: [], videos: [], settings: {}, requests: [], media: [], gallery: [], reviews: [], tab: 'accueil', current: null, filter: 'actives', avisFiltre: 'en attente', statsJours: 30 };
 
 /* ---------------- API */
 async function api(path, opts = {}) {
@@ -40,6 +42,7 @@ async function start() {
     const [o, r, a, pr] = await Promise.all([api('/api/admin/overview'), api('/api/admin/requests'), api('/api/admin/reviews'), api('/api/admin/pros')]);
     Object.assign(st, o, { requests: r.requests, reviews: a.reviews, pros: pr.pros });
   } catch { return showLogin(); }
+  await chargerFactures().catch(() => { st.f = null; });
   $('#login').hidden = true; $('#dash').hidden = false; $('#logout').hidden = false;
   const onglet = location.hash.slice(1); // raccourcis de l'application : /admin/#produits…
   if (onglet && document.querySelector(`[data-tab="${CSS.escape(onglet)}"]`)) {
@@ -52,6 +55,7 @@ function countNew() {
   const np = (st.pros || []).filter(p => p.status === 'en attente').length + st.requests.filter(r => r.status === 'nouveau' && r.pro_id).length;
   const bp = $('#proCount'); bp.textContent = np; bp.hidden = !np;
   const a = st.reviews.filter(r => r.status === 'en attente').length; const c = $('#avisCount'); c.textContent = a; c.hidden = !a;
+  const fr = (st.f?.invoices || []).filter(i => i.state === 'en retard').length; const bf = $('#factCount'); bf.textContent = fr; bf.hidden = !fr;
   const al = st.alerts || {}; $('#alertDot').hidden = Boolean(st.version && (al.email || al.whatsapp));
 }
 
@@ -62,8 +66,9 @@ document.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click',
 }));
 
 function render() {
-  const fn = { pros: tPros, carte: tCarte, sauvegarde: tSauvegarde, alertes: tAlertes, demandes: tDemandes, produits: tProduits, galerie: tGalerie, avis: tAvis, stats: tStats, textes: tTextes, videos: tVideos, medias: tMedias }[st.tab];
+  const fn = { accueil: tAccueil, factures: tFactures, pros: tPros, carte: tCarte, sauvegarde: tSauvegarde, alertes: tAlertes, demandes: tDemandes, produits: tProduits, galerie: tGalerie, avis: tAvis, stats: tStats, textes: tTextes, videos: tVideos, medias: tMedias }[st.tab];
   $('#panel').innerHTML = fn();
+  if (st.tab === 'accueil') apresAccueil();
   if (st.tab === 'medias') loadMedia();
   if (st.tab === 'textes') { majMusique(); if (!st.files) chargerFichiers().then(majMusique); }
   if (st.tab === 'carte' && !st.files) chargerFichiers().then(render);
@@ -80,7 +85,7 @@ function demandeAvisLien(r) {
   return [tel && `<a href="https://wa.me/${tel}?text=${encodeURIComponent(texte)}" target="_blank" rel="noopener">Demander un avis (WhatsApp)</a>`,
     r.email && `<a href="mailto:${esc(r.email)}?subject=${encodeURIComponent('Votre avis compte pour nous')}&body=${encodeURIComponent(texte)}">Demander un avis (e-mail)</a>`].filter(Boolean).join('');
 }
-const ADMIN_VERSION = '3.4';
+const ADMIN_VERSION = '3.7';
 function alertBanner() {
   if (!st.version) return `<button class="adm-alerte adm-alerte--warn" data-goto="alertes">⚠️ Serveur du site pas à jour — voir l’onglet Alertes</button>`;
   const a = st.alerts || {};
@@ -114,7 +119,7 @@ function tSauvegarde() {
     <h2 style="font-size:1.1rem;margin-top:0">2. Restaurer une sauvegarde</h2>
     <p class="note">Remet les éléments du fichier dans la base. Les éléments existants portant le même identifiant sont remplacés ; ce qui n’est pas dans le fichier est conservé.</p>
     <div class="adm-restore">
-      ${[['products', 'Produits (fiches, prix, grilles)', true], ['settings', 'Textes, contact, réglages devis', true], ['gallery', 'Galerie', true], ['reviews', 'Avis', true], ['videos', 'Vidéos', true], ['requests', 'Demandes et devis', true], ['media', 'Photos importées', true]]
+      ${[['products', 'Produits (fiches, prix, grilles)', true], ['settings', 'Textes, contact, réglages devis', true], ['gallery', 'Galerie', true], ['reviews', 'Avis', true], ['videos', 'Vidéos', true], ['requests', 'Demandes et devis', true], ['invoices', 'Factures', true], ['payments', 'Paiements reçus', true], ['expenses', 'Registre des achats', true], ['pros', 'Clients professionnels', true], ['media', 'Photos importées', true]]
         .map(([k, l, c]) => `<label class="adm-check"><input type="checkbox" name="only" value="${k}" ${c ? 'checked' : ''}> ${l}</label>`).join('')}
     </div>
     <label class="btn btn--sombre adm-upload">Choisir le fichier de sauvegarde…<input type="file" accept=".json,application/json" id="restoreFile" hidden></label>
@@ -166,6 +171,9 @@ function carteDemande(r) {
       <p class="adm-meta">${[r.phone && `<a href="tel:${esc(r.phone)}">${esc(r.phone)}</a>`, r.email && `<a href="mailto:${esc(r.email)}">${esc(r.email)}</a>`, r.event_type, r.event_date && 'le ' + new Date(r.event_date).toLocaleDateString('fr-FR'), r.delivery].filter(Boolean).join(' · ')}</p>
       ${r.items.length ? `<ul>${r.items.map(i => `<li>${i.unit === 'kg' ? `${String(i.qty).replace('.', ',')} kg de` : `${i.qty} ×`} ${esc(i.name)} (${i.unit_cents ? euro(i.unit_cents) + ' ' : ''}${esc(i.label || '')})${i.unit === 'kg' ? ' <strong class="adm-pro">PRO</strong>' : ''}</li>`).join('')}</ul><p><strong>Estimation : ${euro(r.estimate_cents)}</strong></p>` : ''}
       ${r.message ? `<p style="white-space:pre-wrap">${esc(r.message)}</p>` : ''}
+      ${r.accepted_at ? `<p class="adm-accepte">✓ Devis accepté en ligne le ${new Date(r.accepted_at.replace(' ', 'T') + 'Z').toLocaleString('fr-FR', { dateStyle: 'medium', timeStyle: 'short' })}${r.accepted_name ? ` par ${esc(r.accepted_name)}` : ''}</p>`
+        : r.quote_sent_at ? `<p class="adm-meta">✉ Devis envoyé par e-mail le ${new Date(r.quote_sent_at.replace(' ', 'T') + 'Z').toLocaleDateString('fr-FR', { dateStyle: 'medium' })} à ${esc(r.quote_sent_to || '')}</p>` : ''}
+      ${facturesDemande(r)}
       <div class="adm-actions">
         <select data-status="${r.id}" aria-label="Statut">${STATUSES.map(s => `<option ${s === r.status ? 'selected' : ''}>${s}</option>`).join('')}</select>
         ${r.kind === 'devis' ? `<a class="btn btn--or btn--petit" href="/admin/devis.html?id=${r.id}" target="_blank" rel="noopener">${r.quote ? 'Ouvrir le devis PDF' : 'Préparer le devis PDF'}</a>` : ''}
@@ -880,6 +888,8 @@ $('#pickerUpload').addEventListener('change', e => run(async () => {
 
 /* ---------------- Événements du panneau */
 const panel = $('#panel');
+initFactures({ api, toast, run, st, render: () => render() });
+initAccueil({ api, st, render: () => render() });
 panel.addEventListener('change', e => {
   if (e.target.id === 'filter') { st.filter = e.target.value; render(); }
   if (e.target.id === 'filtrePro') { st.filtrePro = e.target.value; render(); }
@@ -914,14 +924,14 @@ panel.addEventListener('change', e => {
       try { data = JSON.parse(await f.text()); } catch { throw new Error('Ce fichier n’est pas lisible.'); }
       if (data?.format !== 'saveurs-des-rois-backup') throw new Error('Ce fichier n’est pas une sauvegarde Saveurs des Rois.');
       const n = Object.fromEntries(Object.entries(data.tables).map(([k, v]) => [k, (v || []).length]));
-      const resume = `Sauvegarde du ${new Date(data.created_at).toLocaleString('fr-FR')} : ${n.products || 0} produits, ${n.reviews || 0} avis, ${n.gallery || 0} photos de galerie, ${n.requests || 0} demandes, ${n.media || 0} photos importées.`;
+      const resume = `Sauvegarde du ${new Date(data.created_at).toLocaleString('fr-FR')} : ${n.products || 0} produits, ${n.reviews || 0} avis, ${n.gallery || 0} photos de galerie, ${n.requests || 0} demandes, ${n.invoices || 0} factures, ${n.expenses || 0} achats, ${n.media || 0} photos importées.`;
       if (!confirm(`${resume}\n\nRestaurer les éléments cochés ? Les fiches actuelles du même nom seront remplacées par celles de la sauvegarde.`)) { e.target.value = ''; return; }
       msg.textContent = 'Restauration en cours…';
       const r = await api('/api/admin/restore', { method: 'POST', body: { ...data, only } });
       e.target.value = '';
       msg.textContent = 'Restauration terminée : ' + Object.entries(r.counts).map(([k, v]) => `${v} ${k}`).join(', ') + '.';
       const o = await api('/api/admin/overview'); Object.assign(st, o);
-      st.requests = (await api('/api/admin/requests')).requests; st.reviews = (await api('/api/admin/reviews')).reviews; countNew();
+      st.requests = (await api('/api/admin/requests')).requests; st.reviews = (await api('/api/admin/reviews')).reviews; await chargerFactures().catch(() => {}); countNew();
     }, 'Sauvegarde restaurée.');
   }
   if (e.target.id === 'mediaUpload') run(async () => {
